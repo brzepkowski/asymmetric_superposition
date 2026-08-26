@@ -10,7 +10,7 @@ import math
 import torch
 from scipy.optimize import minimize
 
-from common import P, sample_x
+from common import P, measure, sample_x, tilt
 
 M, BINS, N_RAND, N_START = 2 ** 19, 96, 150, 3
 LO, HI = math.log(0.05), math.log(1.5)  # range of the short/long length ratio in the random starts
@@ -36,10 +36,11 @@ def binned_mse(z, x):
     return (x - mean[idx]).pow(2).mean().item()
 
 
-def report(q):  # signed opening angles (counter-clockwise positive), long/short length ratios
-    ang = lambda v: (v * 90 + 180) % 360 - 180
-    return (f"(f1, f3): opened by {ang(q[0]):+.1f} deg, |f3| / |f1| = {math.exp(-q[1]):.2f};   "
-            f"(f2, f4): opened by {ang(q[2]):+.1f} deg, |f4| / |f2| = {math.exp(-q[3]):.2f}")
+def report(q):  # the pairs as measure() finds them (the search may pair f1 with f4), then the raw vectors
+    W = kernel(q)
+    pairs = "; ".join(f"(f{p['pair'][0] + 1}, f{p['pair'][1] + 1}) opened by {tilt(p['cos']):.1f} deg, ratio {p['ratio']:.1f}"
+                      for p in measure(W)["pairs"]) or "no antipodal pairs"
+    return pairs + "   " + " ".join(f"f{i + 1}=({W[0, i]:+.3f}, {W[1, i]:+.3f})" for i in range(4))
 
 
 x = sample_x(M, P, torch.Generator().manual_seed(11))
