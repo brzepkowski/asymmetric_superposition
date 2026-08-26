@@ -1,0 +1,13 @@
+{
+  "arch": "relu_tied",
+  "n": 4,
+  "d": 2,
+  "seed": 17,
+  "p_active": 0.2,
+  "l1_lambda": 0.0,
+  "steps": 20000,
+  "batch": "fixed",
+  "task_mse": 0.006114431191235781,
+  "total_params": 12,
+  "alive_params": 12
+}

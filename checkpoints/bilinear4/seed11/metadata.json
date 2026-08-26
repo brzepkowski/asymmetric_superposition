@@ -1,0 +1,13 @@
+{
+  "arch": "bilinear4",
+  "n": 4,
+  "d": 2,
+  "seed": 11,
+  "p_active": 0.2,
+  "l1_lambda": 0.0,
+  "steps": 20000,
+  "batch": "fixed",
+  "task_mse": 0.005567469634115696,
+  "total_params": 234,
+  "alive_params": 234
+}
