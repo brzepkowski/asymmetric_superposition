@@ -102,13 +102,25 @@ Below we compare the two encodings. In the asymmetric one, $f_1$ is shortened an
 
 ![Symmetric vs asymmetric antipodal pair ($|f_3| / |f_1| = 4.25$): the closed-form decoders for $x_1$ and $x_3$, and the MSE of the best decoder split into the two features' contributions.](figures/asym_compare.png)
 
+Is it then always better to make the pair more asymmetric? To check this, we sweep the length ratio $|f_3| / |f_1|$ from $1$ to $100$ and compute, for each value, the MSE of the best decoder, both in closed form and from binned samples. In the binned case the segment is divided into bins of equal width and every feature gets its own decoder, which predicts the feature's mean value over the samples that land in the same bin. In both cases, as in the previous figure, we report the sum of the two features' MSEs rather than their average.
+
+![The summed MSE of $x_1$ and $x_3$ under the best decoder as a function of the length ratio $|f_3| / |f_1|$. Left: the closed-form decoder, in total and split into the two features' contributions. Right: the closed form against binned decoders of three resolutions, one decoder per feature on the same bins, their MSEs summed. Triangles mark the minima. The dashed line marks the ratio $4.25$ used above.](figures/asym_sweep.png)
+
+The closed-form curve first falls, because the error of the lengthened feature vanishes faster than the error of the shortened one grows, but it flattens out at a ratio of about $3$–$4$ (a minimum of $0.0106$ at $3.4$, against $0.0117$ for the symmetric pair) and then slowly rises again, toward $0.0113$: beyond this point the shortened feature is essentially unreadable whenever its partner is active, and its error dominates the total. Asymmetry therefore helps only up to a moderate ratio, and the optimum is shallow. A binned decoder has its minimum at the same ratio ($3.2$–$3.6$ for the three resolutions), but is stricter beyond it: once the short embedding becomes comparable to the width of a bin, the readings of the short feature on its own are no longer resolved, and the MSE climbs steeply, the earlier the coarser the bins (with $50$ bins the symmetric pair is better again above a ratio of $13$, with $400$ bins above $89$).
+
 ## "Opening" the antipodal pairs
 
 Another modification boils down to slightly tilting one of the embeddings of a pair with respect to its partner. With this strategy the case of no active features still lands at the origin, and each feature active on its own still lands on its embedding vector, but the co-active case moves off the line into the interior of the parallelogram spanned by the two embeddings.
 
 ![Closing vs opening the pair: on the antipodal pair (left) a co-active reading lands on the line, where a single active feature could have produced it; on the opened pair (right) it lands inside the parallelogram, where nothing else can.](figures/opening.png)
 
-This allows the decoder to distinguish features that are active on their own from co-active ones, which results in better reconstruction performance.
+This allows the decoder to distinguish features that are active on their own from co-active ones, which results in better reconstruction performance. In fact, a decoder of infinite resolution would be able to distinguish the co-activation at an arbitrarily small opening angle, since the co-active readings leave the line as soon as $\varepsilon > 0$.
+
+However, trained models have finite resolution. Below we investigate its effects by studying what a binned decoder is actually capable of. We keep the length ratio of both pairs equal to $1$, tilt $f_3$ off the antipode of $f_1$ by $\varepsilon$, keep the other pair closed, and score every $\varepsilon$ with binned decoders of three resolutions. The bins are now square cells covering the 2D plane of readings, and again every feature gets its own decoder, which predicts the feature's mean value over the samples that land in the same cell. Since all four features are now involved, we report the MSE as defined in the Setup, i.e. averaged over the four features.
+
+![The MSE of the binned decoder as a function of the opening angle $\varepsilon$ of the pair $(f_1, f_3)$, the pair $(f_2, f_4)$ closed, averaged over the four features, for three resolutions, one decoder per feature on the same cells (triangles mark the minima).](figures/opening_sweep.png)
+
+The MSE has its minimum at a finite opening, which moves toward zero as the bins get finer. But why does the MSE not stay constant once $\varepsilon$ surpasses this threshold for a given binning? This is because opening one pair makes it interfere with the readings of the other pair. We will study this in more depth in the next section.
 
 ## Search for the best strategy
 
@@ -116,11 +128,17 @@ We close this section by investigating what is in fact the best strategy for a l
 
 We do this by a free search over the encoder geometry. For an unconstrained decoder the angle between the two pair lines does not matter, so we may pin two of the embeddings to the axes and let the remaining two be arbitrary vectors in the plane, described by their angle and length. Every geometry is scored by the MSE of a decoder obtained numerically, as in "Decoder from data samples alone" but with two-dimensional bins. The four parameters are optimized by a random search followed by local descent.
 
-The search finds that the two free embeddings settle almost antipodal to the pinned ones, much shorter than them, and slightly tilted, each toward the long embedding of the other pair. The $(f_1, f_3)$ pair is opened by $20.7^\circ$ with a length ratio $|f_3| / |f_1| = 13.5$, and the $(f_2, f_4)$ pair by $20.4^\circ$ with $|f_4| / |f_2| = 13.0$, reaching an MSE floor of $0.00221$ per feature, against $0.0056$ for the closed symmetric pairs decoded at the same resolution ($2^{19}$ samples, $96 \times 96$ bins). The opening angle and the length ratio are resolution effects. A closed-form solution tells us that the cost keeps decreasing as the angle between the feature pair approaches 0, without ever reaching it, so an ideal decoder would open them by an arbitrarily small angle. However, a decoder of finite sharpness (a binned one, or a trained network) settles on a finite opening, and the finer its resolution, the shorter the embeddings it can still read, so the length ratio grows with the resolution as well.
-
 Below we present the geometry obtained by the above search along with regions indicating the co-occurrence of various feature pairs.
 
 ![The geometry found by the search, with a zoom on the origin as an inset: the pair $(f_1, f_3)$ opened by $20.7^\circ$ at length ratio $13.5$, the pair $(f_2, f_4)$ by $20.4^\circ$ at $13.0$. Each shaded parallelogram is the region where the readings of two co-active features land; the two thin orange slivers along the axes belong to the pairs.](figures/optimal_geometry.png)
+
+The search finds that the two free embeddings settle almost antipodal to the pinned ones, much shorter than them, and slightly tilted, each toward the long embedding of the other pair. The $(f_1, f_3)$ pair is opened by $20.7^\circ$ with a length ratio $|f_3| / |f_1| = 13.5$, and the $(f_2, f_4)$ pair by $20.4^\circ$ with $|f_4| / |f_2| = 13.0$, reaching an MSE floor of $0.00221$ per feature, against $0.0056$ for the closed symmetric pairs decoded at the same resolution ($96 \times 96$ bins).
+
+Surprisingly, the length ratio found by the search is far larger than the $3$–$4$ that was optimal for a closed pair, for the binned decoders just as for the closed form. However, this is not a contradiction. The limiting factor in the closed pair case was that the two readings still occupied the same 1D line segment, so whenever two features were co-active, their contributions were mixed together. The moment one of the features is tilted, the co-active case moves into the interior of the parallelogram and can be distinguished by the decoder. But, as mentioned before, this comes at the price of interfering with the features of the second pair, and the best solution of finite resolution accommodates for that by shrinking the feature even more.
+
+To check that this is indeed what sets the ratio, we repeat the asymmetry sweep on the opened geometry: both pairs opened by the angles found by the search ($20.7^\circ$ and $20.4^\circ$), the length ratio of both swept from $1$ to $100$, and every value scored by the same binned decoders as in the previous section. If shrinking the short embeddings really pays for the interference, the minimum should now lie well beyond the $3$–$4$ of the closed pair, and should move further out as the bins get finer, since it is the resolution that stops the shrinking. This is what we find: the minimum sits at a ratio of about $4.5$ with $24$ bins per axis, $5.6$ with $48$ and $6.3$ with $96$. For the finest binning, the MSE stays within $5\%$ of its minimum up to a ratio of $13$, which explains the result obtained by the search. 
+
+![The MSE of the binned decoders with both pairs opened by the angles found by the search ($20.7^\circ$ and $20.4^\circ$), as a function of the length ratio, for three resolutions (triangles mark the minima). The dashed line marks the ratio $13$ found by the search.](figures/ratio_sweep.png)
 
 
 # A model's strategy depends on its depth
@@ -221,14 +239,6 @@ We have demonstrated that uniform polyhedra are not inherently the best solution
 We have shown two strategies that models can employ to improve on the simple symmetric antipodal embedding of the features: making the embeddings of a pair asymmetric and slightly tilting one of them. Only deeper models can use these strategies, because only their expressivity allows for it.
 
 Finally, we have shown that shallow models are essentially the best possible approximations of the theoretical binned decoders within their class, while deeper models diverge slightly from the best approximation in theirs. We suspect that this is the result of a training run that is too short, which a longer one would resolve.
-
-# Future work
-
-Below I describe my (Bartosz Rzepkowski) plans on how to extend the results presented in this work.
-
-In this work I analyzed the models as two parts: an encoder consisting of a single linear layer, and the remaining MLPs forming the decoder. What the individual MLPs do on their own in the whole process, however, remains unknown (although I have some candidate ideas), and this is the first avenue I want to explore in the near future.
-
-The reader may have noticed that throughout the analysis of the embedding space I made no reference to any "neuron". This was a deliberate choice: with no additional constraint imposed on the model, I did not expect any part of it other than its input and output to be easily interpretable in terms of neurons, so I focused on the geometry rather than on its correspondence to the neuron basis. I want to follow the same path when analyzing the individual MLPs: geometry rather than a connection to individual neurons.
 
 # Appendix: derivation of the closed-form decoder
 

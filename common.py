@@ -320,5 +320,19 @@ def bayes2d(z, x, bins=64):  # MSE of the binned decoder on the reading plane (b
     return (x - mean[idx]).pow(2).mean().item()
 
 
+def binned_fit(z, x, bins):
+    # the binned decoder on the reading plane: bins x bins cells over the range of z, the origin at a cell
+    # centre so that no cell edge runs along an embedding line; returns the cell-mean predictor (a cell
+    # never seen predicts 0)
+    h = (z.max(0).values - z.min(0).values) / bins
+    cell = torch.floor(z / h + 0.5).long()
+    lo, wide = cell.min(0).values, cell.max(0).values - cell.min(0).values + 1
+    flat = lambda c: ((c - lo).clamp(min=0) * torch.tensor([wide[1], 1])).sum(1).clamp(max=wide.prod() - 1)
+    idx = flat(cell)
+    cnt = torch.zeros(wide.prod()).index_add_(0, idx, torch.ones(len(z)))
+    mean = torch.zeros(wide.prod(), x.shape[1]).index_add_(0, idx, x) / cnt.clamp(min=1)[:, None]
+    return lambda zz: mean[flat(torch.floor(zz / h + 0.5).long())]
+
+
 def parallelogram(u, v):
     return [(0, 0), tuple(u), (u[0] + v[0], u[1] + v[1]), tuple(v)]
