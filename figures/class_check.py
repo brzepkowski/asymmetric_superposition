@@ -1,5 +1,6 @@
-# The two representative models (gallery.py) against the best decoder of their class, over the
-# reading plane u = W x (no encoder bias, so the origin is "nothing active"):
+# The two representative models (the seeds picked by gallery.py), retrained on a fixed sample of 2^20
+# inputs instead of 4096 (cached under checkpoints/big/), against the best decoder of their class, over
+# the reading plane u = W x (no encoder bias, so the origin is "nothing active"):
 #   binned3d_<arch>   -- 3D surfaces of the binned decoder E[x_i | u], one panel per feature
 #   class3d_<arch>    -- the same for the least-squares polynomial of the model's degree (2 / 16)
 #   class_diff_<arch> -- top-down maps of (model - best of the class) per feature, embeddings drawn
@@ -21,10 +22,12 @@ from matplotlib.path import Path as MplPath
 from scipy.ndimage import binary_erosion
 from scipy.spatial import ConvexHull
 
-from common import BLUE, INK, MUTED, P, all_runs, classify, load_model, poly_predictor, sample_x
+from common import BLUE, CKPT, INK, MUTED, P, all_runs, classify, load_model, measure, poly_predictor, sample_x, train
 
 OUT = Path("figures")
+BIG, BATCH, DEVICE = CKPT / "big", 2 ** 20, "cuda"  # the retraining: same seed (so the same initialization), 2^20 samples
 M, SEED, BINS, MIN_CNT, FINE, SHRINK = 2 ** 20, 7, 40, 20, 200, 0.97  # FINE: grid for the polynomial and model surfaces
+FIT_CNT = 60  # denser support for the polynomial and model surfaces: below it the degree-16 fit oscillates at the rim
 ARCHES = (("bilinear1", 2, "single bilinear MLP"), ("bilinear4", 16, "four bilinear MLPs"))
 AZIM = {"bilinear1": (50, -40, -40, 50), "bilinear4": (-40, 50, -40, 50)}  # per-feature view, rotated where the arm hides the surface
 
@@ -102,8 +105,9 @@ x = sample_x(M, P, torch.Generator().manual_seed(SEED))
 cuts = []
 for arch, deg, name in ARCHES:
     rec = pick(runs, arch)
-    model = load_model(rec["path"])
+    model = load_model(train(arch, rec["seed"], root=BIG, batch=BATCH, device=DEVICE) / "model.pt")
     W = model.w_enc.detach()
+    print(f"{name}, seed {rec['seed']}, {BATCH} samples: geometry {classify(measure(W))}")
     Wn = W.numpy()
     u = x @ W.T
     lo, hi = u.min(0).values - 1e-3, u.max(0).values + 1e-3
@@ -134,7 +138,7 @@ for arch, deg, name in ARCHES:
     G_fit = fit(fine).float().view(FINE, FINE, 4)
     # fine support: inside the zonotope (straight edges) and where the interpolated sample density is high enough
     dens = Fn.interpolate(cnt.view(1, 1, BINS, BINS), size=(FINE, FINE), mode="bilinear")[0, 0]
-    fine_support = (dens >= MIN_CNT) & inside_zonotope(W, fine).view(FINE, FINE)
+    fine_support = (dens >= FIT_CNT) & inside_zonotope(W, fine).view(FINE, FINE)
     for G in (G_model, G_fit):
         G[~fine_support] = float("nan")
     label = f"{name}, seed {rec['seed']}"
@@ -158,7 +162,7 @@ for arch, deg, name in ARCHES:
     fig.savefig(OUT / f"class_diff_{arch}.png", dpi=200)
 
     k = W.norm(dim=0).argmax().item()
-    pair = next(p["pair"] for p in rec["m"]["pairs"] if k in p["pair"])
+    pair = next(p["pair"] for p in measure(W)["pairs"] if k in p["pair"])
     partner = pair[0] if pair[1] == k else pair[1]
     ts = torch.linspace(-0.95 * W[:, partner].norm(), 0.95 * W[:, k].norm(), 600)
     cut = ts[:, None] * W[:, k] / W[:, k].norm()

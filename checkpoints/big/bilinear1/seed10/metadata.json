@@ -1,0 +1,8 @@
+{
+  "arch": "bilinear1",
+  "seed": 10,
+  "p_active": 0.2,
+  "steps": 20000,
+  "batch": 1048576,
+  "task_mse": 0.009309603832662106
+}

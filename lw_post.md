@@ -140,6 +140,11 @@ To check that this is indeed what sets the ratio, we repeat the asymmetry sweep 
 
 ![The MSE of the binned decoders with both pairs opened by the angles found by the search ($20.7^\circ$ and $20.4^\circ$), as a function of the length ratio, for three resolutions (triangles mark the minima). The dashed line marks the ratio $13$ found by the search.](figures/ratio_sweep.png)
 
+To summarize, the best strategy needs to balance the following three mechanisms:
+1. **Making the embeddings of a pair asymmetrical**, which pours most of the error into the prediction of one of them, which simultaneously reduces the overall MSE.
+2. **Opening the pairs**, which makes it possible to distinguish the co-activation of two features from only one of them, or none, being active.
+3. **Shortening the tilted embeddings**, which minimizes the interference with the features of the second pair.
+
 
 # A model's strategy depends on its depth
 
@@ -147,7 +152,7 @@ Knowing what a good strategy is under the general constraints, let us now turn t
 
 ![Representative encoder geometries of trained models with one bilinear layer (left) and four bilinear layers (right). Embeddings of the same antipodal pair share a colour.](figures/gallery.png)
 
-To make sure the above results are not an accident, we conducted 20 training runs for each depth, from 1 to 4 bilinear MLP layers, as well as for the tied ReLU model, and checked which strategy each trained model uses:
+To make sure the above results are not an accident, we conducted 20 training runs for each depth, from 1 to 4 bilinear MLP layers, as well as for the tied ReLU model, and checked which strategy each trained model uses. We used sample of size 4,096 and 20,000 training steps in each training.
 
 | model | symmetric pairs | asymmetric pairs | asymmetric + opened pairs | other |
 |---|---|---|---|---|
@@ -197,6 +202,8 @@ Below we compare it with the best fits from the function classes of our models. 
 
 We have given indications of why the models may or may not use different strategies to improve their performance in superposition. But how close do the trained models actually come to these theoretical results?
 
+For this comparison we retrain the two representative models of the previous section (the same seeds, hence the same initializations) on a much larger sample of $2^{20}$ inputs instead of the 4,096 used there, keeping the 20,000 training steps.
+
 Below we present the binned decoders for all four features, which the model with a single bilinear MLP is supposed to reconstruct.
 
 ![Binned decoder ($2^{20}$ samples, $40 \times 40$ bins over the reading plane), single bilinear MLP, seed 10.](figures/binned3d_bilinear1.png)
@@ -209,7 +216,7 @@ Finally, we show the difference between what the model has actually learned and 
 
 ![Trained model minus the best decoder of its class, single bilinear MLP, seed 10.](figures/class_diff_bilinear1.png)
 
-The analogous results for the model with four bilinear MLPs are presented below. In this case the difference between the trained model and the best fit in its class is much larger than for the single-MLP model. We attribute it to a training run that is too short for the deeper model (both models were trained for 20,000 steps).
+The analogous results for the model with four bilinear MLPs are presented below. In this case the difference between the trained model and the best fit in its class is much larger than for the single-MLP model.
 
 ![Binned decoder, four bilinear MLPs, seed 9.](figures/binned3d_bilinear4.png)
 
@@ -221,16 +228,17 @@ To take a closer look, we cut the reading plane of each model along the line of 
 
 ![Cut along the line of the longest embedding: the binned decoder, the best decoder of the class and the trained model.](figures/cut_long.png)
 
-Finally, we define two measures to put numbers on these observations:
+Finally, we define two measures to quantify the above observations:
 - The *MSE gap* $= (\mathrm{MSE}_{\text{model}} - \mathrm{MSE}_{\text{class}}) / \mathrm{MSE}_{\text{model}}$ is the fraction of the model's error that it could still remove by becoming the best decoder of its class. It is equal to zero when the model already is that decoder.
-- The *score* $= 1 - \mathbb{E}\|\hat{x} - \hat{x}'\|^2 / \mathrm{Var}(\hat{x})$ is the fraction of the variance of the model's outputs that the best decoder of its class explains. It is one when the two functions coincide, and it would be zero if the best decoder of the class were no better at predicting the model's outputs than a constant.
+- The *VAR score* $= 1 - \mathbb{E}\|\hat{x} - \hat{x}'\|^2 / \mathrm{Var}(\hat{x})$ is the fraction of the variance of the model's outputs that the best decoder of its class explains. It is one when the two functions coincide, and it would be zero if the best decoder of the class were no better at predicting the model's outputs than a constant.
 
-| model | MSE, binned decoder | MSE, best of the class | MSE, trained model | MSE gap | score |
+| model | MSE, binned decoder | MSE, best of the class | MSE, trained model | MSE gap | VAR score |
 |---|---|---|---|---|---|
-| single bilinear MLP | 0.0059 | 0.0093 | 0.0093 | 0.1% | 0.9998 |
-| four bilinear MLPs | 0.0043 | 0.0045 | 0.0058 | 21.9% | 0.975 |
+| single bilinear MLP, 20,000 steps | 0.0061 | 0.0093 | 0.0093 | 0.0% | 1.000 |
+| four bilinear MLPs, 20,000 steps | 0.0036 | 0.0041 | 0.0060 | 31.9% | 0.962 |
+| four bilinear MLPs, 150,000 steps | 0.0039 | 0.0040 | 0.0049 | 18.0% | 0.983 |
 
-These results underline once more that the shallow model is essentially the best approximation of the binned decoder that its class allows, while the deeper model comes close to it, but not as close as the shallow one.
+These results underline once more that the shallow model is essentially the best approximation of the binned decoder that its class allows, while the deeper model comes close to it, but not as close as the shallow one. We attribute the remaining gap to the training itself: retraining the same model from the same initialization for 150,000 steps instead of 20,000 (last row of the table) lowers its MSE from $0.0060$ to $0.0049$ and halves the gap, but does not close it.
 
 # Summary
 
