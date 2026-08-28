@@ -55,7 +55,7 @@ This encoding method has one huge caveat. In the fourth case, with both features
 
 ![The four cases on the segment between $f_3$ and $f_1$: feature 1 alone and features 1 and 3 together can produce the same reading.](figures/naive_cases.png)
 
-Because of this information loss the decoder needs to average between different plausible scenarios to give the best possible response (measured with MSE).
+Because of this information loss the decoder needs to average between different plausible scenarios to give the best possible response (measured with MSE): the best guess at a reading is the average of the guesses each scenario would make, weighted by how likely each scenario is to have produced that reading. The Appendix makes this precise.
 
 Below we present the formula for such a theoretical decoder reconstructing the first feature, when given a reading at position $s$ on the segment (the derivation of this formula is presented in the Appendix).
 
@@ -228,15 +228,13 @@ To take a closer look, we cut the reading plane of each model along the line of 
 
 ![Cut along the line of the longest embedding: the binned decoder, the best decoder of the class and the trained model.](figures/cut_long.png)
 
-Finally, we define two measures to quantify the above observations:
-- The *MSE gap* $= (\mathrm{MSE}_{\text{model}} - \mathrm{MSE}_{\text{class}}) / \mathrm{MSE}_{\text{model}}$ is the fraction of the model's error that it could still remove by becoming the best decoder of its class. It is equal to zero when the model already is that decoder.
-- The *VAR score* $= 1 - \mathbb{E}\|\hat{x} - \hat{x}'\|^2 / \mathrm{Var}(\hat{x})$ is the fraction of the variance of the model's outputs that the best decoder of its class explains. It is one when the two functions coincide, and it would be zero if the best decoder of the class were no better at predicting the model's outputs than a constant.
+Finally, to quantify the above observations, we define the *MSE gap* $= (\mathrm{MSE}_{\text{model}} - \mathrm{MSE}_{\text{class}}) / \mathrm{MSE}_{\text{model}}$, i.e., the fraction of the model's error that it could still remove by becoming the best decoder of its class. It is equal to zero when the model already is that decoder.
 
-| model | MSE, binned decoder | MSE, best of the class | MSE, trained model | MSE gap | VAR score |
-|---|---|---|---|---|---|
-| single bilinear MLP, 20,000 steps | 0.0061 | 0.0093 | 0.0093 | 0.0% | 1.000 |
-| four bilinear MLPs, 20,000 steps | 0.0036 | 0.0041 | 0.0060 | 31.9% | 0.962 |
-| four bilinear MLPs, 150,000 steps | 0.0039 | 0.0040 | 0.0049 | 18.0% | 0.983 |
+| model | MSE, binned decoder | MSE, best of the class | MSE, trained model | MSE gap |
+|---|---|---|---|---|
+| single bilinear MLP, 20,000 steps | 0.0061 | 0.0093 | 0.0093 | 0.0% |
+| four bilinear MLPs, 20,000 steps | 0.0036 | 0.0041 | 0.0060 | 31.9% |
+| four bilinear MLPs, 150,000 steps | 0.0039 | 0.0040 | 0.0049 | 18.0% |
 
 These results underline once more that the shallow model is essentially the best approximation of the binned decoder that its class allows, while the deeper model comes close to it, but not as close as the shallow one. We attribute the remaining gap to the training itself: retraining the same model from the same initialization for 150,000 steps instead of 20,000 (last row of the table) lowers its MSE from $0.0060$ to $0.0049$ and halves the gap, but does not close it.
 
@@ -252,11 +250,31 @@ Finally, we have shown that shallow models are essentially the best possible app
 
 We derive $\hat{x}_1(s) = \mathbb{E}[x_1 \mid s]$ for the symmetric antipodal pair, where $s = x_1 - x_3$. Recall that each feature is inactive (equal to $0$) with probability $1 - p$ and otherwise uniformly distributed on $[0, 1]$, independently of the other.
 
-The best guess at a reading $s$ is the average of $x_1$ over all the ways of producing that reading, each way weighted by how likely it is. The case of neither feature active produces exactly $s = 0$ and nothing else, so $\hat{x}_1(0) = 0$. The remaining three cases produce readings $s \neq 0$:
+The best guess at a reading $s$ is the average of $x_1$ over all the ways of producing that reading, each way weighted by how likely it is. This is the averaging between scenarios of the main text, and it can be written down exactly. Let $c$ stand for the case (neither feature active, feature 1 alone, feature 3 alone, both), $P(c)$ for its prior probability and $\rho_c(s)$ for the density of the readings it produces at $s$. By Bayes' rule, the posterior probability of a case given the reading is
 
-- **Feature 1 alone** (probability $p(1-p)$). The reading is $s = x_1$, so $x_1 = s$. Since $x_1$ is uniform on $[0, 1]$, this case is equally likely to produce any $s \in (0, 1]$: its weight is $p(1-p)$.
-- **Feature 3 alone** (probability $p(1-p)$). The reading is $s = -x_3$ and $x_1 = 0$. Equally likely for any $s \in [-1, 0)$: weight $p(1-p)$.
-- **Both active** (probability $p^2$). The reading is $s = x_1 - x_3$. The pairs $(x_1, x_3)$ that produce a given $s$ form a diagonal segment of the unit square, whose length is proportional to $1 - |s|$: readings near $0$ are easy to produce (any $x_1 \approx x_3$ will do), readings near $\pm 1$ need one feature near $1$ and the other near $0$. The weight is therefore $p^2 (1 - |s|)$. All points of the segment are equally likely, so the average of $x_1$ over it is the midpoint between its smallest and largest value. Since $x_1 = x_3 + s$ with $x_3$ between $0$ and $1$: for $s > 0$ the smallest $x_1$ is $s$ (at $x_3 = 0$) and the largest is $1$ (at $x_3 = 1 - s$, beyond which $x_1$ would exceed $1$), so the average is $\frac{s + 1}{2}$; for $s < 0$ the smallest $x_1$ is $0$ (at $x_3 = |s|$, below which $x_1$ would be negative) and the largest is $1 + s$ (at $x_3 = 1$), so the average is $\frac{0 + (1 + s)}{2}$. In both cases this is $\frac{1+s}{2}$.
+$$ P(c \mid s) = \frac{P(c)\, \rho_c(s)}{\sum_{c'} P(c')\, \rho_{c'}(s)}. $$
+
+The weight of a case is how often it produces the reading $s$: its prior probability $P(c)$ times the density $\rho_c(s)$ of its readings at $s$. Dividing by the sum of the weights turns them into probabilities. The best guess is then the average of the best guesses of the individual cases, weighted by these posterior probabilities:
+
+$$ \hat{x}_1(s) = \mathbb{E}[x_1 \mid s] = \sum_c P(c \mid s)\, \mathbb{E}[x_1 \mid s, c]. $$
+
+
+The figure below shows these weights and the per-case guesses. One case needs a remark: with neither feature active the reading is exactly $s = 0$, so this case has no density along $s$ but a point mass, $P(c)\, \rho_c(s) = (1-p)^2\, \delta(s)$ with $\delta$ the Dirac delta. At $s = 0$ it therefore outweighs every other case, and at any $s \neq 0$ it has no weight at all. The rest of this appendix computes the weights and takes the weighted average.
+
+![Left: the weight of each case, $P(c)\, \rho_c(s)$, i.e. how often it produces the reading $s$; the case of neither feature active produces only $s = 0$, so its weight is a Dirac delta, $(1-p)^2\, \delta(s)$, drawn as an arrow in the usual way (its height is not to scale; the number next to it is the probability it carries). Right: the best guess of each case, $\mathbb{E}[x_1 \mid s, c]$ (for the co-active case, the average over the pairs $(x_1, x_3)$ producing $s$), and their weighted average, which is the closed-form decoder $\hat{x}_1(s)$.](figures/appendix_cases.png)
+
+For each case we need $P(c)$, $\rho_c(s)$ and $\mathbb{E}[x_1 \mid s, c]$:
+
+- **Neither active**: $P(c) = (1-p)^2$. The reading is exactly $s = 0$, so $\rho_c(s) = \delta(s)$, and $\mathbb{E}[x_1 \mid s, c] = 0$. This case alone produces $s = 0$, hence $\hat{x}_1(0) = 0$; the other three produce readings $s \neq 0$.
+- **Feature 1 alone**: $P(c) = p(1-p)$. The reading $s = x_1$ is uniform on $(0, 1]$, so $\rho_c(s) = 1$ there, and $\mathbb{E}[x_1 \mid s, c] = s$.
+- **Feature 3 alone**: $P(c) = p(1-p)$. The reading $s = -x_3$ is uniform on $[-1, 0)$, so $\rho_c(s) = 1$ there, and $\mathbb{E}[x_1 \mid s, c] = 0$.
+- **Both active**: $P(c) = p^2$. Since $x_1$ and $x_3$ are independent and uniform, the pair $(x_1, x_3)$ is spread evenly over the unit square $[0, 1]^2$ of its possible values (the figure below, left; this is a picture of the input values, not of the reading plane), and the reading $s = x_1 - x_3$ is constant along each diagonal line of that square. How often a reading occurs is therefore proportional to the length of its diagonal: it is longest for $s = 0$ (the main diagonal from $(0, 0)$ to $(1, 1)$) and shrinks linearly to a single corner at $s = \pm 1$ (one feature at $1$, the other at $0$). This gives the triangle $\rho_c(s) = 1 - |s|$ on $[-1, 1]$ (right).
+
+![Left: with both features active, the pair $(x_1, x_3)$ is uniform on the unit square of its possible values, and each reading $s$ corresponds to one diagonal line $x_1 - x_3 = s$ of it. Right: the length of that diagonal, as a function of $s$, is the density $\rho_c(s) = 1 - |s|$ of the co-active case.](figures/appendix_square.png)
+
+It remains to find the best guess of the co-active case, $\mathbb{E}[x_1 \mid s, c]$, the average of $x_1$ over all the pairs $(x_1, x_3)$ that produce the reading $s$, i.e. over the diagonal $x_1 - x_3 = s$. Given $s$, $x_1$ is uniformly distributed over its range on the diagonal, and the mean of a uniform variable is the midpoint of its range. For $s > 0$ the diagonal runs from $(x_1, x_3) = (s, 0)$ to $(1, 1 - s)$, so $x_1$ is uniform on $[s, 1]$ with mean $\frac{s + 1}{2}$. For $s < 0$ it runs from $(0, |s|)$ to $(1 + s, 1)$, so $x_1$ is uniform on $[0, 1 + s]$ with mean $\frac{1 + s}{2}$. In both cases $\mathbb{E}[x_1 \mid s, c] = \frac{1 + s}{2}$.
+
+With $P(c)$, $\rho_c(s)$ and $\mathbb{E}[x_1 \mid s, c]$ of every case in hand, we can now evaluate the weighted average. Only the cases that can produce the reading enter it, which leaves two ranges of $s$ to consider.
 
 For $0 < s \le 1$ the reading can come from "feature 1 alone" or from "both":
 
