@@ -60,15 +60,15 @@ for n, c in curves.items():
 plt.rcParams.update({"font.size": 12, "axes.labelsize": 13})
 fig, axes = plt.subplots(1, 2, figsize=(11, 3.6), layout="constrained")
 ax = axes[0]
-ax.plot(RS, total, color="black", lw=2.5, label="$x_1 + x_3$ (sum)")
+ax.plot(RS, total, color="black", lw=2.5, label="$x_1 + x_3$")
 ax.plot(RS, parts[:, 0], color=BLUE, lw=1.8, label="$x_1$ (shortened)")
 ax.plot(RS, parts[:, 1], color=ORANGE, lw=1.8, label="$x_3$ (lengthened)")
 ax.plot(RS[best], total[best], "v", color="black", ms=7)
 ax.set_title("closed-form decoder", fontsize=12)
 ax = axes[1]
-ax.plot(RS, total, color="black", lw=2.5, label="closed form, $x_1 + x_3$ (sum)")
+ax.plot(RS, total, color="black", lw=2.5, label="closed form, $x_1 + x_3$")
 for (n, c), color in zip(curves.items(), BLUE_RAMP):
-    ax.plot(RS, c, color=color, lw=1.8, label=f"binned, {n} bins, $x_1 + x_3$ (sum)")
+    ax.plot(RS, c, color=color, lw=1.8, label=f"binned, {n} bins, $x_1 + x_3$")
     ax.plot(RS[c.argmin()], c.min(), "v", color=color, ms=7)
 ax.set_title("binned decoders (one per feature, on the same bins)", fontsize=12)
 for ax in axes:
