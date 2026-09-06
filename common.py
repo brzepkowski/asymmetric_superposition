@@ -123,29 +123,53 @@ def train(arch, seed, steps=STEPS, root=CKPT, batch=4096, device="cpu"):  # one 
     return run_dir
 
 
-def measure(W):  # antipodal pairs of an encoder: greedy by |cos|, kept when cos <= -PAIR_COS
+def measure(W):
+    """Reads the encoder's geometry off its weight W (shape (d, n); column i is the direction
+    feature i is written to). Repeatedly takes the two most collinear remaining columns and,
+    when they point in nearly opposite directions (cosine <= -PAIR_COS), records them as an
+    antipodal pair. Returns a dict with three entries:
+      "dead"  — list of feature indices the model dropped: their column norm is below
+                DEAD_EPS of the largest column's norm.
+      "pairs" — list with one dict per antipodal pair found: "pair" is the two feature
+                indices, "cos" the cosine between their columns (-1 would be exactly
+                antipodal), "ratio" the longer column's norm over the shorter one's
+                (1 would be perfectly symmetric).
+      "class" — coarse label for the whole encoder: "sacrifice" if any feature is dead,
+                "pairs" if instead all features sit in two antipodal pairs, else "other".
+    """
     norms = W.norm(dim=0)
     dead = [i for i in range(N) if norms[i] < DEAD_EPS * norms.max()]
     alive = [i for i in range(N) if i not in dead]
-    Wn = W[:, alive] / norms[alive].clamp(min=1e-8)
-    C = Wn.T @ Wn
+    Wn = W[:, alive] / norms[alive].clamp(min=1e-8)  # live columns, each scaled to unit length
+    C = Wn.T @ Wn  # Gram matrix of those unit columns: C[a, b] is the cosine between them
     left, pairs = list(range(len(alive))), []
     while len(left) >= 2:
+        # find the two most collinear remaining columns, aligned or anti-aligned (largest |cos|)
         a, b = max(((a, b) for a in left for b in left if a < b), key=lambda ab: C[ab].abs().item())
-        if C[a, b].item() <= -PAIR_COS:
+        if C[a, b].item() <= -PAIR_COS:  # record them only if nearly opposite
             i, j = alive[a], alive[b]
             pairs.append({"pair": (i, j), "cos": C[a, b].item(),
                           "ratio": (norms[[i, j]].max() / norms[[i, j]].min()).item()})
-        left = [c for c in left if c not in (a, b)]
+        left = [c for c in left if c not in (a, b)]  # either way, both leave the pool
     cls = "pairs" if not dead and len(pairs) == 2 else ("sacrifice" if dead else "other")
     return {"dead": dead, "class": cls, "pairs": pairs}
 
 
-def tilt(cos):  # degrees off exactly antipodal
+def tilt(cos):
+    """Turns a pair's cosine into how many degrees it falls short of exactly antipodal:
+    cos = -1 gives 0° (perfect pair), cos = -0.94 gives ~20°. The min/max only clamp
+    float rounding so acos never sees a value outside [-1, 1].
+    """
     return 180.0 - math.degrees(math.acos(max(-1.0, min(1.0, cos))))
 
 
 def classify(m):
+    """Turns measure()'s output m into the strategy label used in the write-up's table.
+    "sacrifice" and "other" pass through as their labels; a two-pair encoder is examined
+    further: a pair is asymmetric when its norm ratio is at least RHO_T, tilted when it is
+    at least TILT_T degrees off exactly antipodal, and the label says which of the two
+    deviations occur anywhere in the encoder ("neither" = two clean antipodal pairs).
+    """
     if m["class"] == "sacrifice":
         return "sacrificed feature"
     if m["class"] == "other":
@@ -155,7 +179,16 @@ def classify(m):
     return "asymmetry + tilt" if asym and til else "asymmetry only" if asym else "tilt only" if til else "neither"
 
 
-def all_runs():  # every run in checkpoints/, with its encoder geometry and its MSE on one fixed evaluation sample
+def all_runs():
+    """The catalogue of trained runs: loads every checkpoints/<arch>/seed<k>/model.pt and scores
+    them all on one fixed batch (seeded 9999). Returns {arch name: list of runs sorted by
+    seed}; each run is a dict with keys
+      "arch", "seed", "path" — which run this is and where its model.pt lives,
+      "W"        — the encoder weight (d, n),
+      "m"        — measure(W), the encoder's geometry,
+      "eval_mse" — the model's reconstruction MSE on the shared batch.
+    E.g. all_runs()["bilinear4"][9]["eval_mse"].
+    """
     torch.manual_seed(9999)
     X_eval = sparse_batch(65536, N, P)
     runs = {a: [] for a in ARCHES}
@@ -170,23 +203,86 @@ def all_runs():  # every run in checkpoints/, with its encoder geometry and its 
 
 
 # --- the closed-form decoder of an antipodal pair ---------------------------------------------------
-# reading s = |f_self| x_self - |f_partner| x_partner; posterior_mean(t, w, v, p) is E[x_self | s = t]
-# with w = the signed length of the self embedding and v = that of the partner (opposite sign).
+# The exact Bayes decoder for one antipodal pair, derived in the write-up's appendix. The two
+# features share one bottleneck axis with opposite signs, so all the decoder ever sees is the
+# reading s = |f_self| x_self - |f_partner| x_partner, and the best possible guess for a feature is
+# its posterior mean given that reading. posterior_mean(t, w, v, p) evaluates it: E[x_self | s = t],
+# with w = the signed embedding length of the feature being decoded, v = the partner's (opposite
+# sign), p = the activation probability. The appendix's symmetric case s = x1 - x3 is w = 1, v = -1;
+# unequal |w|, |v| give the asymmetric pairs of the sweeps.
 
 def posterior_mean(t, w, v, p):
+    """E[x_self | s = t]: the best possible guess for the decoded feature given the reading.
+
+    t — tensor of reading values; w, v — signed embedding lengths of the decoded feature and
+    of its partner (opposite signs); p — activation probability. Returns a tensor like t,
+    NaN where no combination of the two features can produce that reading.
+
+    The body is the appendix's weighted average over cases: "only" flags readings the decoded
+    feature can produce alone, "ghost" those the partner produces alone. L and R are the
+    endpoints of the interval x_self is uniform on when both features are active (the
+    appendix's [s, 1] for s > 0, generalized to arbitrary lever lengths), so (R + L)/2 is the
+    co-active best guess and width = R - L takes the place of the triangle density; num/den
+    are the case-weighted mean and total density.
+    """
     if w < 0:
         t, w, v = -t, -w, -v
-    L = (t / w).clamp(min=0)
-    R = ((t - v) / w).clamp(max=1)
+    # In the appendix_square figure: each diagonal of the unit square is the set of (x1, x3)
+    # producing one reading. [L, R] is its projection onto the x1 axis, and width as a function
+    # of t is the right panel's triangle density 1 - |s| (generalized to unequal lever lengths).
+    # E.g. (with w = 1, v = -1):
+    #   s = 0.75:  diagonal (0.75, 0) to (1, 0.25)  ->  L = 0.75, R = 1,    width = 0.25
+    #   s = 0:     diagonal (0, 0)    to (1, 1)     ->  L = 0,    R = 1,    width = 1
+    #   s = -0.25: diagonal (0, 0.25) to (0.75, 1)  ->  L = 0,    R = 0.75, width = 0.75
+    L = (t / w).clamp(min=0)  # the reading in feature units with the partner at its minimum (0)
+    R = ((t - v) / w).clamp(max=1)  # same with the partner at its maximum (1); both clamped to [0, 1]
     width = (R - L).clamp(min=0)
+    # 0/1 indicators of the two single-feature cases:
+    #   - "only": the decoded feature alone gives s = w * x_self, so it can produce exactly
+    #     the readings in (0, w).
+    #   - "ghost": the partner alone covers (v, 0); the decoded feature is then 0, so the case
+    #     adds density (see den) but nothing to the mean (absent from num) — this is what drags
+    #     the ghost region's guess toward 0.
+    #   - the "neither" case needs no indicator: its point mass at s = 0 falls outside both
+    #     intervals, where den = 0 returns NaN.
     only = ((t > 0) & (t < w)).float()
     ghost = ((t > v) & (t < 0)).float()
+    # num, with the grouping made explicit:
+    #     num = [p(1-p)]·[only/w]·(t/w)  +  [p²]·[width/(-v)]·((R+L)/2)
+    #            prior  · density · mean     prior ·  density  ·  mean
+    # The means:
+    #   - self alone: s = w * x_self is deterministic, so the reading pins the feature
+    #     exactly at t/w.
+    #   - both active: the reading only confines x_self to [L, R], uniformly, so the best
+    #     guess is the midpoint (R + L)/2.
+    #   - ghost (partner alone): the decoded feature is off, mean 0, so its term isn't written.
+    # The densities are explained below, at den.
     num = p * (1 - p) * only * t / w ** 2 + p ** 2 * width * (R + L) / (2 * -v)
+    # den is the total density of the reading (the Bayes normalizer), prior x density per case:
+    #   - self alone:    prior p(1-p), density 1/w on (0, w)
+    #   - partner alone: prior p(1-p), density 1/(-v) on (v, 0)
+    #   - both active:   prior p^2, density width/(-v)
+    # Where the both-active density comes from: pin x_self at some value first. Then
+    #     s = w * x_self + v * x_partner
+    # is just "partner alone, shifted by the constant w * x_self", and a lone uniform feature on
+    # lever v has density 1/(-v) (the partner-alone case above). So every allowed x_self value
+    # contributes density 1/(-v), and the allowed values are exactly the interval [L, R]:
+    #     density = integral over [L, R] of 1/(-v) dx_self = (R - L)/(-v) = width/(-v)
+    # In the symmetric case w = 1, v = -1 this is width/1 = 1 - |s|, the appendix's triangle.
     den = p * (1 - p) * (only / w + ghost / -v) + p ** 2 * width / -v
     return torch.where(den > 0, num / den, torch.nan)
 
 
-def x1_posterior(s, a, b, p=P):  # numpy version on the pair |f3| = a, |f1| = b, s = b x1 - a x3
+def x1_posterior(s, a, b, p=P):
+    """E[x1 | s] on the pair with lever lengths |f1| = b, |f3| = a and reading s = b x1 - a x3.
+    Same function as posterior_mean(s, b, -a, p), but in numpy, with the num/den algebra worked
+    out into one explicit formula per region:
+      - "own" (s > 0): f1 alone or both active,
+      - "plateau" (mild negative s): the reading says nothing about x1 — exactly p/2,
+      - "tail" (strongly negative s): even a maxed-out partner caps x1 below 1,
+      - NaN outside (-a, b).
+    Valid for a >= b only.
+    """
     own, plateau, tail = (s > 0) & (s < b), (s > b - a) & (s < 0), (s > -a) & (s <= b - a)
     out = np.full_like(s, np.nan)
     out[own] = ((2 * (1 - p) * a * s[own] + p * (b ** 2 - s[own] ** 2))
@@ -197,6 +293,14 @@ def x1_posterior(s, a, b, p=P):  # numpy version on the pair |f3| = a, |f1| = b,
 
 
 def x3_posterior(s, a, b, p=P):
+    """E[x3 | s] on the same pair: the mirror of x1_posterior, i.e. posterior_mean(s, -a, b, p).
+    x3 pulls the reading negative, so its regions run the other way:
+      - "far" (strongly negative s): x3 alone or both active,
+      - "own" (mild negative s): the linear stretch where the reading tracks x3 directly,
+      - "other" (s > 0): f1 alone or both active,
+      - NaN outside (-a, b).
+    Valid for a >= b only.
+    """
     far, own, other = (s > -a) & (s < b - a), (s >= b - a) & (s < 0), (s > 0) & (s < b)
     out = np.full_like(s, np.nan)
     out[far] = ((-2 * (1 - p) * b * s[far] + p * (a ** 2 - s[far] ** 2))

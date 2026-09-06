@@ -4,6 +4,7 @@
 set -e
 PY=${PY:-$HOME/miniforge3/envs/pivotal/bin/python}
 
+$PY check_posteriors.py  # the piecewise posteriors agree with posterior_mean
 $PY train.py  # the 100 runs behind the strategy table; a no-op while checkpoints/ is populated
 for f in posterior_sym appendix_cases appendix_square asym_compare asym_sweep opening_sweep ratio_sweep class_compare gallery search_geometry optimal_geometry opened_cut class_check long_run; do
   echo "== figures/$f.py"
