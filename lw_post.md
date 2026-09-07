@@ -78,13 +78,13 @@ Having samples of the data, we can also visualize them along our line segment:
 
 The above plot can make it more explicit that without the case of co-active features the best possible solution would be to use a ReLU function.
 
-Now, how can we accomodate for the fact that there are situations in which different features are co-active? To do that we need to look at the definition of the loss function we are using.
+Now, how can we accommodate for the fact that there are situations in which different features are co-active? To do that we need to look at the definition of the loss function we are using.
 
 In our setup the loss is the MSE. Let's consider all the samples that produce the same reading $s$. The decoder has to output one number for all of them, and its performance is measured by the squared distance from that number to each sample's true $x_1$. The number that minimizes the total squared distance to a set of values is their arithmetic mean, so the best decoder outputs the mean of $x_1$ over the samples with reading $s$.
 
 So, the choice of the mean thus comes from the loss, not from the data. If we chose the mean absolute error instead, the best output would be the median of the same set of values, and with a 0–1 loss its most frequent value (the mode).
 
-However, having a finite number samples we cannot take the mean over "all samples with reading $s$" literally, because no two samples have the same reading. Instead we split the line segment into very small intervals (bins), gather the samples whose reading falls into each, and average their $x_1$. The result is a step function approximating the closed-form curve, and it converges to it as we take more samples and narrower bins. Below we present the result of such an average computed on the data samples shown above:
+However, with a finite number samples we cannot take the mean over "all samples with reading $s$" literally, because no two samples have the same reading. Instead we split the line segment into very small intervals (bins), gather the samples whose reading falls into each, and average their $x_1$. The result is a step function approximating the closed-form curve, and it converges to it as we take more samples and narrower bins. Below we present the result of such an average computed on the data samples shown above:
 
 ![Binned means of the 4096 samples (100 bins) against the closed-form decoder $\hat{x}_1(s)$. The blue dot at $s = 0$ is the mean over the samples with reading exactly $0$.](figures/binned_x1_sym.png)
 
@@ -98,13 +98,13 @@ The first modification is very simple: we make one of the embeddings shorter tha
 
 This has a rather counterintuitive outcome. With this change the prediction error is "poured" into the reconstruction of a single feature; however, measured over both features, the total error turns out to be smaller!
 
-Below we compare the two encodings. In the asymmetric one, $f_1$ is shortened and $f_3$ lengthened so that $|f_3|$ is $4.25$ times $|f_1|$. The first two panels show the closed-form decoders for both features, and the third the MSE these decoders achieve, split into the contributions of the two features.
+Below we compare the two encodings. In the asymmetric one, $f_1$ is shortened and $f_3$ lengthened so that $|f_3|$ is $4.25$ times $|f_1|$. The top two panels show the closed-form decoders for both features, and the bottom one the MSE these decoders achieve, split into the contributions of the two features.
 
 ![Symmetric vs asymmetric antipodal pair ($|f_3| / |f_1| = 4.25$): the closed-form decoders for $x_1$ and $x_3$, and the MSE of the best decoder split into the two features' contributions.](figures/asym_compare.png)
 
 Is it then always better to make the pair more asymmetric? To check this, we sweep the length ratio $|f_3| / |f_1|$ from $1$ to $100$ and compute, for each value, the MSE of the best decoder, both in closed form and from binned samples. In the binned case the segment is divided into bins of equal width and every feature gets its own decoder, which predicts the feature's mean value over the samples that land in the same bin. In both cases, as in the previous figure, we report the sum of the two features' MSEs rather than their average.
 
-![The summed MSE of $x_1$ and $x_3$ under the best decoder as a function of the length ratio $|f_3| / |f_1|$. Left: the closed-form decoder, in total and split into the two features' contributions. Right: the closed form against binned decoders of three resolutions, one decoder per feature on the same bins, their MSEs summed. Triangles mark the minima. The dashed line marks the ratio $4.25$ used above.](figures/asym_sweep.png)
+![The summed MSE of $x_1$ and $x_3$ under the best decoder as a function of the length ratio $|f_3| / |f_1|$. Top: the closed-form decoder, in total and split into the two features' contributions. Bottom: the closed form against binned decoders of three resolutions, one decoder per feature on the same bins, their MSEs summed. Triangles mark the minima. The dashed line marks the ratio $4.25$ used above.](figures/asym_sweep.png)
 
 The closed-form curve first falls, because the error of the lengthened feature vanishes faster than the error of the shortened one grows, but it flattens out at a ratio of about $3$–$4$ (a minimum of $0.0106$ at $3.4$, against $0.0117$ for the symmetric pair) and then slowly rises again, toward $0.0113$: beyond this point the shortened feature is essentially unreadable whenever its partner is active, and its error dominates the total. Asymmetry therefore helps only up to a moderate ratio, and the optimum is shallow. A binned decoder has its minimum at the same ratio ($3.2$–$3.6$ for the three resolutions), but is stricter beyond it: once the short embedding becomes comparable to the width of a bin, the readings of the short feature on its own are no longer resolved, and the MSE climbs steeply, the earlier the coarser the bins (with $50$ bins the symmetric pair is better again above a ratio of $13$, with $400$ bins above $89$).
 
@@ -140,9 +140,9 @@ To check that this is indeed what sets the ratio, we repeat the asymmetry sweep 
 
 The MSE of the individual features (middle panel) shows the two sides of the trade-off. At a ratio of $1$ the co-active parallelograms are wide and overlap, which makes the value of a long feature ambiguous: this interference is the $0.0046$ of $x_3$ and $x_4$. As the tilted embeddings shrink, the parallelograms collapse onto the axes and this error falls to a floor of $0.0002$ by a ratio of about $13$. The short features $x_1$ and $x_2$, unlike in the closed pair, hardly pay for shrinking, because the decoder reads them off the line: their error rises to $0.0055$ by a ratio of $2$, then stays flat until the embeddings become comparable to a bin, and only then climbs steeply. The minimum of the average lies where the long features have gained the most while the short ones are still on their plateau.
 
-We also checked whether the claim from the "Asymmetrical antipodal encoding" section still holds, i.e., whether asymmetry helps within the pair itself, this time with opened embeddings. In the right panel we show the sum of the MSEs of the two features of each pair. It turns out that the asymmetry pays off far more than for the closed pair: the MSE of $x_1 + x_3$ drops from $0.0091$ to $0.0055$, and rises again only at the resolution limit.
+We also checked whether the claim from the "Asymmetrical antipodal encoding" section still holds, i.e., whether asymmetry helps within the pair itself, this time with opened embeddings. In the bottom panel we show the sum of the MSEs of the two features of each pair. It turns out that the asymmetry pays off far more than for the closed pair: the MSE of $x_1 + x_3$ drops from $0.0091$ to $0.0055$, and rises again only at the resolution limit.
 
-![The MSE of the binned decoders with both pairs opened by the angles found by the search ($20.7^\circ$ and $20.4^\circ$), as a function of the length ratio. Left: averaged over the four features, for three resolutions (triangles mark the minima). Middle: the MSE of each feature on its own and their average, with $96$ bins per axis. Right: the MSE summed over the two features of each pair, as in the closed-pair sweep. The dashed line marks the ratio $13$ found by the search.](figures/ratio_sweep.png)
+![The MSE of the binned decoders with both pairs opened by the angles found by the search ($20.7^\circ$ and $20.4^\circ$), as a function of the length ratio. Top: averaged over the four features, for three resolutions (triangles mark the minima). Middle: the MSE of each feature on its own and their average, with $96$ bins per axis. Bottom: the MSE summed over the two features of each pair, as in the closed-pair sweep. The dashed line marks the ratio $13$ found by the search.](figures/ratio_sweep.png)
 
 To summarize, the best strategy needs to balance the following three mechanisms:
 1. **Making the embeddings of a pair asymmetrical**, which pours most of the error into the prediction of one of them, which simultaneously reduces the overall MSE.
@@ -166,7 +166,7 @@ To make sure the above results are not an accident, we conducted 20 training run
 | 3 bilinear layers | 0 | 5 | 14 | 1 |
 | 4 bilinear layers | 0 | 4 | 10 | 6 |
 
-It turns out that the opening of a feature pair never appears on its own, which is why the table has no separate "opened pairs" column.
+The "other" column gathers the runs whose encoder does not decompose into two antipodal pairs, either because some feature has no roughly opposite partner or because a feature is dropped entirely. It would also collect encoders whose pairs are opened (tilted beyond a small threshold) without being asymmetric, but no run produced such a geometry. Moreover, since opening never appears on its own, the table reports it only jointly with asymmetry, in the "asymmetric + opened pairs" column.
 
 These results clearly show that models with a single bilinear MLP default to symmetric antipodal pairs, and so does the tied ReLU model. Only models with more bilinear MLPs start to use the strategies introduced in the previous section. Why is that? It turns out to boil down to the expressivity of the function class each model can implement.
 
@@ -244,7 +244,7 @@ These results underline once more that the shallow model is essentially the best
 
 # Summary
 
-We have demonstrated that uniform polyhedra are not inherently the best solution to the task of reconstructing independent features of equal importance and sparsity. The earlier indications that they might be stem from the architectural choices made by the engineers rather than from the task itself.
+We have demonstrated that uniform polyhedra are not inherently the best solution to the task of reconstructing independent features of equal importance and sparsity. The earlier indications that they might stem from the architectural choices made by the engineers rather than from the task itself.
 
 We have shown two strategies that models can employ to improve on the simple symmetric antipodal embedding of the features: making the embeddings of a pair asymmetric and slightly tilting one of them. Only deeper models can use these strategies, because only their expressivity allows for it.
 

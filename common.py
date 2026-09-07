@@ -310,7 +310,11 @@ def x3_posterior(s, a, b, p=P):
     return out
 
 
-def arms(a, b):  # the two open arms of the segment, s < 0 and s > 0
+def arms(a, b):
+    """Plotting grid for the posterior curves: the reading segment (-a, b) as two separate
+    arrays, the s < 0 and s > 0 arms. Separate because the curves jump at s = 0 — one
+    continuous array would draw a spurious vertical segment across the discontinuity.
+    """
     return [np.linspace(lo + 1e-6, hi - 1e-6, 600) for lo, hi in ((-a, 0.0), (0.0, b))]
 
 

@@ -45,18 +45,21 @@ def curves(ax, a, b):
 
 if __name__ == "__main__":
     plt.rcParams.update({"font.size": 12, "axes.labelsize": 13})
-    fig, axes = plt.subplots(1, 3, figsize=(13, 3.4), layout="constrained", width_ratios=(1.5, 1.5, 1))
+    fig, axd = plt.subplot_mosaic([["symmetric", "symmetric", "asymmetric", "asymmetric"],
+                                   [".", "bars", "bars", "."]],
+                                  figsize=(9, 6.6), layout="constrained")
     bills = {}
-    for ax, (name, a, b) in zip(axes, CASES):
+    for name, a, b in CASES:
+        ax = axd[name]
         curves(ax, a, b)
         frame(ax, marks=False, lo=-a, hi=b, xticks=np.round(np.arange(-np.floor(a * 2) / 2, b + 1e-9, 0.5), 2))
         ax.set_title(name)
         bills[name] = bill(a, b)
-    axes[0].set_ylabel("predicted feature")
-    axes[0].legend(handles=[plt.Line2D([], [], color=BLUE, lw=2.5, label="$\\hat{x}_1(s)$"),
-                            plt.Line2D([], [], color=ORANGE, lw=2.5, label="$\\hat{x}_3(s)$")],
-                   loc="upper center", frameon=False)
-    axb = axes[2]
+    axd["symmetric"].set_ylabel("predicted feature")
+    axd["symmetric"].legend(handles=[plt.Line2D([], [], color=BLUE, lw=2.5, label="$\\hat{x}_1(s)$"),
+                                     plt.Line2D([], [], color=ORANGE, lw=2.5, label="$\\hat{x}_3(s)$")],
+                            loc="upper center", frameon=False)
+    axb = axd["bars"]
     for i, (name, _, _) in enumerate(CASES):
         m1, m3 = bills[name]
         axb.bar(i, m1, 0.55, color=BLUE, label="$x_1$" if i == 0 else None)

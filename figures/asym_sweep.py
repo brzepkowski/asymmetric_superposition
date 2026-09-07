@@ -58,7 +58,7 @@ for n, c in curves.items():
     print(f"{n:4d} bins: minimum {c.min():.4f} at r = {RS[c.argmin()]:.2f};  back above the r = 1 value at r = {RS[np.argmax((c > c[0]) & (RS > 2))]:.1f}")
 
 plt.rcParams.update({"font.size": 12, "axes.labelsize": 13})
-fig, axes = plt.subplots(1, 2, figsize=(11, 3.6), layout="constrained")
+fig, axes = plt.subplots(2, 1, figsize=(6.5, 7.2), layout="constrained")
 ax = axes[0]
 ax.plot(RS, total, color="black", lw=2.5, label="$x_1 + x_3$")
 ax.plot(RS, parts[:, 0], color=BLUE, lw=1.8, label="$x_1$ (shortened)")
@@ -74,11 +74,11 @@ ax.set_title("binned decoders (one per feature, on the same bins)", fontsize=12)
 for ax in axes:
     ax.axvline(RATIO, color=MUTED, lw=1, ls="--", zorder=0)
     ax.set_xscale("log")
-    ax.set_xlabel("length ratio $|f_3| / |f_1|$")
     ax.set_xticks([1, 2, 4.25, 10, 30, 100], ["1", "2", "4.25", "10", "30", "100"])
     ax.set_ylim(0, 0.027)
+    ax.set_ylabel("MSE")
     ax.spines[["top", "right"]].set_visible(False)
     ax.legend(frameon=False, fontsize=10, loc="upper left")
-axes[0].set_ylabel("MSE")
+axes[1].set_xlabel("length ratio $|f_3| / |f_1|$")
 fig.savefig(OUT.with_suffix(".pdf"))
 fig.savefig(OUT.with_suffix(".png"), dpi=200)
