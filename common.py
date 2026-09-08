@@ -324,32 +324,70 @@ CLASS_DEG = {"quadratic": 2, "quartic": 4, "deg8": 8, "deg16": 16}
 
 
 def class_fit(kind, s, Y, a, b, grid):
-    # on one pair (samples s, targets Y = (x1, x3)): least squares for the polynomial classes; for the
-    # tied ReLU the slopes are fixed by the encoder (g*a for x1, g*b for x3) and the scale g and the two
-    # thresholds are found by a grid search. Returns the fit on `grid` and the MSE per feature.
+    """Finds the best decoder of one antipodal pair within the function class named by `kind`
+    (a polynomial class from CLASS_DEG, or the tied ReLU's pair of hinges), by fitting it to a
+    sample of readings and their targets. Inputs:
+      - `kind`: the decoder class.
+      - `s`: the sampled readings on the pair (M scalars).
+      - `Y`: the (M, 2) targets behind those readings, columns (x1, x3).
+      - `a`, `b`: the pair's two embedding lengths (used only by the tied ReLU, which assumes
+        the feature in column 0 of Y reads the positive arm with length `a`).
+      - `grid`: where to evaluate the fitted decoder for plotting; plays no role in the fit.
+    Returns the fitted curves on `grid` (len(grid), 2) and the per-feature MSE on the sample.
+    """
+    # ----- Polynomial case -----
     if kind in CLASS_DEG:
         deg = CLASS_DEG[kind]
         smin, smax = s.min(), s.max()
         tr = lambda u: ((2 * u - smin - smax) / (smax - smin)).double()
-        S = torch.from_numpy(np.polynomial.chebyshev.chebvander(tr(s).numpy(), deg))
-        C = torch.linalg.lstsq(S, Y.double()).solution
-        G = torch.from_numpy(np.polynomial.chebyshev.chebvander(tr(grid).numpy(), deg))
-        return (G @ C).float(), ((S @ C - Y.double()) ** 2).mean(0).float()
-    cs = torch.linspace(s.min().item() - 0.3, s.max().item() + 0.3, 221)
-    ey2 = (Y ** 2).mean(0)
+        # Build the design matrix for the fit: each row corresponds to one sample reading s_i,
+        # and holds the values of all deg+1 Chebyshev basis polynomials T_0..T_deg at that
+        # (rescaled) reading. Fitting in the Chebyshev basis instead of raw powers of s keeps
+        # the least-squares problem well conditioned at degrees 8 and 16.
+        S = torch.from_numpy(np.polynomial.chebyshev.chebvander(tr(s).numpy(), deg))  # (M, deg+1)
+        # Solve the least-squares problem S @ C ~= Y. Each column of C holds the polynomial
+        # coefficients for one feature (x1 or x3). Since the class is linear in these
+        # coefficients, this solution is exactly the best decoder in the class — no search needed.
+        C = torch.linalg.lstsq(S, Y.double()).solution  # (deg+1, 2)
+        # Evaluate the same basis polynomials on the plotting grid, using the same rescaling
+        # `tr` (fitted on the sample's range) so that the coefficients in C mean the same thing.
+        G = torch.from_numpy(np.polynomial.chebyshev.chebvander(tr(grid).numpy(), deg))  # (len(grid), deg+1)
+        # Return the fitted decoder curves evaluated on the grid (grid basis times coefficients),
+        # and the mean squared residual of the fit on the sample, separately for each feature.
+        return (G @ C).float(), ((S @ C - Y.double()) ** 2).mean(0).float()  # (len(grid), 2), (2,)
+    # ----- Tied ReLU case -----
+    # Each feature's decoder is a hinge, slope * relu(±(s - c)): flat at zero on one side of a
+    # threshold c, linear on the other. Weight tying fixes the slopes to g*a (x1) and g*b (x3)
+    # with one shared gain g, so only three numbers are free — g and the two thresholds — but
+    # they sit inside the relu, so they are found by search rather than least squares.
+    # Candidate thresholds: 221 values covering the readings plus 0.3 of margin on each side,
+    # so "the hinge never fires" (threshold past the data) is a reachable candidate.
+    cs = torch.linspace(s.min().item() - 0.3, s.max().item() + 0.3, 221)  # (221,)
+    # Precompute sufficient statistics, the one pass over the M samples. For a hinge
+    # h(s) = relu(sig * (s - c)) the sample MSE of the prediction slope * h expands as
+    #   E[(y - slope*h)^2] = E[y^2] - 2*slope*E[y*h] + slope^2 * E[h^2],
+    # where the slope appears only outside the expectations. So storing E[y^2] once and, per
+    # sign and candidate threshold, E[h^2] and E[y*h], makes the MSE of any slope at any
+    # threshold three multiplications — the data is never touched again.
+    ey2 = (Y ** 2).mean(0)  # (2,): E[y^2] per feature
     stats = {}
     for sig in (1.0, -1.0):
-        eyh, ehh = torch.empty(2, len(cs)), torch.empty(len(cs))
+        eyh, ehh = torch.empty(2, len(cs)), torch.empty(len(cs))  # (2, 221) and (221,): E[y*h] and E[h^2] per threshold
         for k, c in enumerate(cs.tolist()):
-            h = torch.relu(sig * (s - c))
+            h = torch.relu(sig * (s - c))  # (M,): the hinge at threshold c, evaluated on every sample
             ehh[k] = (h ** 2).mean()
             eyh[:, k] = (Y * h[:, None]).mean(0)
         stats[sig] = (eyh, ehh)
+    # The search. The gain g couples the two features (one g, both slopes), so it is searched
+    # jointly; given g the features share nothing, so each picks its own best threshold
+    # independently from the precomputed stats, and the g with the lowest summed MSE wins.
     best = None
     for g in torch.logspace(-1.5, 1.5, 61).tolist():
         tot, prs, mses = 0.0, [], []
         for i, (sig, slope) in enumerate(((1.0, g * a), (-1.0, g * b))):
             eyh, ehh = stats[sig]
+            # the MSE expansion above, evaluated for all 221 thresholds at once:
+            # m is (221,), entry k = this feature's MSE at threshold cs[k] under the current slope
             m = ey2[i] - 2 * slope * eyh[i] + slope ** 2 * ehh
             k = m.argmin().item()
             tot += m[k].item()
@@ -358,8 +396,10 @@ def class_fit(kind, s, Y, a, b, grid):
         if best is None or tot < best[0]:
             best = (tot, prs, mses)
     _, prs, mses = best
-    F = torch.stack([slope * torch.relu(sig * (grid - c)) for sig, slope, c in prs], 1)
-    return F, torch.tensor(mses)
+    # Evaluate the two winning hinges on the plotting grid; return the curves and the
+    # per-feature MSEs, the same shape the polynomial branch returns.
+    F = torch.stack([slope * torch.relu(sig * (grid - c)) for sig, slope, c in prs], 1)  # (len(grid), 2)
+    return F, torch.tensor(mses)  # (len(grid), 2), (2,)
 
 
 def poly_predictor(z, x, degree):  # least-squares polynomial of total degree `degree` on the reading plane
