@@ -250,7 +250,7 @@ Is the remaining gap merely the result of a training run that is too short? To c
 | continued to 300,000 steps | 0.0039 | 0.0040 | 0.0049 | 18.6% |
 | continued to 600,000 steps | 0.0039 | 0.0040 | 0.0049 | 18.1% |
 
-The MSE gap shrinks, but clearly saturates. Still, one might argue that the culprit is the small learning rate itself: perhaps the model is stuck refining a mediocre solution that a bolder training would escape. To check this, we also retrained the model from scratch, from the same initialization, with the original larger learning rate spread over 150,000, 300,000 and 600,000 steps. Because the learning rate decays over the course of training, stretching the run changes it at every step, so each of these runs follows a completely different trajectory and lands in a different solution. Indeed, the resulting MSE gaps change non-monotonically with the training length — $18.0\%$, $27.1\%$ and $21.6\%$ — but even the best of them merely matches the $18\%$ at which the continuation saturates, and none improves on it.
+The MSE gap shrinks, but clearly saturates. Still, one might argue that the culprit is the small learning rate itself: perhaps the model is stuck refining a mediocre solution that a bolder training would escape. To check this, we also retrained the model from scratch, from the same initialization, with the original larger learning rate spread over 150,000, 300,000 and 600,000 steps. Because the learning rate is annealed over the course of training, stretching the run changes it at every step, so each of these runs follows a completely different trajectory and lands in a different solution. Indeed, the resulting MSE gaps change non-monotonically with the training length — $18.0\%$, $27.1\%$ and $21.6\%$ — but even the best of them merely matches the $18\%$ at which the continuation saturates, and none improves on it.
 
 The remaining gap of about $18\%$ is therefore not a matter of training length, but of some different phenomenon. We leave it as an open question, since the main purpose of this work was to show that deeper models use asymmetry to their advantage. Nevertheless, understanding why they do not approach the best solutions in their class the way the shallow models do would be a valuable direction for future work.
 
@@ -258,9 +258,13 @@ The remaining gap of about $18\%$ is therefore not a matter of training length, 
 
 
 
-## Limitations
+## Limitations and future work
 
+1. Our method divides the model into two parts: the first, linear layer is the encoder, and the remaining MLPs form the decoder. We do not yet have a proper understanding of what the individual MLP layers are doing. We believe that feeding the whole geometry output by one layer into the following one, and tracking how it is transformed, would also shed light on the role of the individual layers.
 
+2. For explanatory reasons, the results shown in this work were limited to a 2D plane at the encoder's output. We would like to check whether our findings survive in higher-dimensional bottlenecks with more features: do the embeddings still organize into asymmetric, slightly tilted antipodal pairs, and do deeper decoders still profit from them? Since such geometries can no longer be simply plotted, this will require replacing pictures with quantitative measures, such as the length ratios and tilts of the pairs and the interference between them.
+
+3. We found that, contrary to their shallow counterparts, deeper models do not converge to the best possible decoder in their class. We would like to understand precisely why deeper models stop short: for example, whether the obstacle lies in the optimization itself, or in the way the stacked bilinear layers parametrize the polynomials they can in principle express.
 
 # Summary
 
