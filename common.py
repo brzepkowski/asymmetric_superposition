@@ -98,14 +98,16 @@ def load_model(path):
     return model
 
 
-def train(arch, seed, steps=STEPS, root=CKPT, batch=4096, device="cpu"):  # one run: AdamW on a fixed batch, no penalty
+def train(arch, seed, steps=STEPS, root=CKPT, batch=4096, device="cpu", init=None, lr=1e-3):  # one run: AdamW on a fixed batch, no penalty
     run_dir = root / arch / f"seed{seed}"
     if (run_dir / "model.pt").exists():
         return run_dir
     torch.manual_seed(seed)
     model = make_model(arch).to(device)
+    if init:  # continue from a checkpoint instead of the seed's initialization (the RNG use stays the same, so the batch does too)
+        model.load_state_dict(torch.load(init)["state_dict"])
     X = sparse_batch(batch, N, P).to(device)
-    opt = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=0)
+    opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, steps)
     for _ in range(steps):
         mse = torch.nn.functional.mse_loss(model(X), X)
@@ -117,7 +119,8 @@ def train(arch, seed, steps=STEPS, root=CKPT, batch=4096, device="cpu"):  # one 
     blob = {"n": N, "d": D, "state_dict": model.cpu().state_dict()}
     blob.update({"mlp_layers": MLP_LAYERS[arch]} if arch in MLP_LAYERS else {"arch": arch})
     torch.save(blob, run_dir / "model.pt")
-    json.dump({"arch": arch, "seed": seed, "p_active": P, "steps": steps, "batch": batch, "task_mse": mse.item()},
+    json.dump({"arch": arch, "seed": seed, "p_active": P, "steps": steps, "batch": batch, "lr": lr,
+               **({"init": str(init)} if init else {}), "task_mse": mse.item()},
               open(run_dir / "metadata.json", "w"), indent=2)
     print(f"{arch:9s} seed {seed:2d}  train mse {mse.item():.2e}", flush=True)
     return run_dir

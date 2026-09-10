@@ -238,9 +238,29 @@ Finally, to quantify the above observations, we define the *MSE gap* $= (\mathrm
 |---|---|---|---|---|
 | single bilinear MLP, 20,000 steps | 0.0061 | 0.0093 | 0.0093 | 0.0% |
 | four bilinear MLPs, 20,000 steps | 0.0036 | 0.0041 | 0.0060 | 31.9% |
-| four bilinear MLPs, 150,000 steps | 0.0039 | 0.0040 | 0.0049 | 18.0% |
 
-These results underline once more that the shallow model is essentially the best approximation of the binned decoder that its class allows, while the deeper model comes close to it, but not as close as the shallow one. We attribute the remaining gap to the training itself: retraining the same model from the same initialization for 150,000 steps instead of 20,000 (last row of the table) lowers its MSE from $0.0060$ to $0.0049$ and halves the gap, but does not close it.
+These results underline once more that the shallow model is essentially the best approximation of the binned decoder that its class allows, while the deeper model comes close to it, but not as close as the shallow one.
+
+Is the remaining gap merely the result of a training run that is too short? To check this, we continued the training: starting from the 20,000-step checkpoint of the table above, we trained the model further on the same sample, with a smaller learning rate so that it refines the solution it has already found rather than jumping to a completely new one. The smaller learning rate does not freeze the geometry, though. Over the continuation it keeps slowly drifting within the same strategy, the pairs opening from about $19^\circ$ and $21^\circ$ to $27^\circ$ and $44^\circ$ and the length ratio of one of them growing from $2.6$ to $6.5$. As before, each checkpoint is therefore compared with the best decoder of its class for the geometry it has at that moment.
+
+| model | MSE, binned decoder | MSE, best of the class | MSE, trained model | MSE gap |
+|---|---|---|---|---|
+| four bilinear MLPs, 20,000 steps | 0.0036 | 0.0041 | 0.0060 | 31.9% |
+| continued to 150,000 steps | 0.0038 | 0.0040 | 0.0050 | 19.9% |
+| continued to 300,000 steps | 0.0039 | 0.0040 | 0.0049 | 18.6% |
+| continued to 600,000 steps | 0.0039 | 0.0040 | 0.0049 | 18.1% |
+
+The MSE gap shrinks, but clearly saturates. Still, one might argue that the culprit is the small learning rate itself: perhaps the model is stuck refining a mediocre solution that a bolder training would escape. To check this, we also retrained the model from scratch, from the same initialization, with the original larger learning rate spread over 150,000, 300,000 and 600,000 steps. Because the learning rate decays over the course of training, stretching the run changes it at every step, so each of these runs follows a completely different trajectory and lands in a different solution. Indeed, the resulting MSE gaps change non-monotonically with the training length — $18.0\%$, $27.1\%$ and $21.6\%$ — but even the best of them merely matches the $18\%$ at which the continuation saturates, and none improves on it.
+
+The remaining gap of about $18\%$ is therefore not a matter of training length, but of some different phenomenon. We leave it as an open question, since the main purpose of this work was to show that deeper models use asymmetry to their advantage. Nevertheless, understanding why they do not approach the best solutions in their class the way the shallow models do would be a valuable direction for future work.
+
+# Discussion
+
+
+
+## Limitations
+
+
 
 # Summary
 
@@ -248,7 +268,11 @@ We have demonstrated that uniform polyhedra are not inherently the best solution
 
 We have shown two strategies that models can employ to improve on the simple symmetric antipodal embedding of the features: making the embeddings of a pair asymmetric and slightly tilting one of them. Only deeper models can use these strategies, because only their expressivity allows for it.
 
-Finally, we have shown that shallow models are essentially the best possible approximations of the theoretical binned decoders within their class, while deeper models diverge slightly from the best approximation in theirs. We suspect that this is the result of a training run that is too short, which a longer one would resolve.
+Finally, we have shown that shallow models are essentially the best possible approximations of the theoretical binned decoders within their class, while deeper models diverge slightly from the best approximation in theirs. This divergence is not an artifact of a training run that is too short: continuing the training of the deeper model shrinks the gap from $32\%$ to about $18\%$ of its error, where it saturates, and retraining it from scratch, with the original larger learning rate annealed over the longer run, changes the gap non-monotonically and does no better. Why deeper models stop short of the best decoders of their class remains an open question.
+
+# Acknowledgements
+
+BR would like to thank [Pivotal](https://www.pivotal-research.org/) for their support. This research was carried out during the Pivotal AI Safety Research Fellowship.
 
 # Appendix: derivation of the closed-form decoder
 
