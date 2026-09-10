@@ -4,9 +4,9 @@ The current, incredible performance of AI models can be partially attributed to 
 
 One theoretical way around this problem would be to train models with no superposition at all. However, this is believed to greatly reduce their performance. Instead, we would like to better understand the phenomenon itself.
 
-Prior work, [*Toy Models of Superposition*](https://transformer-circuits.pub/2022/toy_model/index.html) (Elhage et al., 2022), on two-layer ReLU networks with independent input features of equal importance and sparsity, suggests that the best geometries for storing the features are uniform polyhedra. In this work we study a similar problem, but with models involving a dedicated encoding layer followed by one or more multilayer perceptrons (MLPs) with a bilinear activation. Current frontier LLMs also use a dedicated encoder as the first step of their computation, so we believe this setup can serve as good groundwork for a better understanding of larger models.
+Prior work, [*Toy Models of Superposition*](https://transformer-circuits.pub/2022/toy_model/index.html) (Elhage et al., 2022), on two-layer ReLU networks with independent input features of equal importance and sparsity, suggests that the best geometries for storing the features are uniform polytopes. In this work we study a similar problem, but with models involving a dedicated encoding layer followed by one or more multilayer perceptrons (MLPs) with a bilinear activation. Current frontier LLMs also use a dedicated encoder as the first step of their computation, so we believe this setup can serve as good groundwork for a better understanding of larger models.
 
-Knowing the exact definition of the data-generating process, we give a theoretical solution to the problem and demonstrate that uniform polyhedra are not the best possible solutions: different, non-symmetric geometries perform better. Surprisingly, only deep models are capable of exploiting these better strategies, while shallow models default to the symmetric ones. We give evidence that the previous results, which suggest uniform geometries are the best for the stated task, stem from the architectural choices made by the engineers rather than from the task itself.
+Knowing the exact definition of the data-generating process, we give a theoretical solution to the problem and demonstrate that uniform polytopes are not the best possible solutions: different, non-symmetric geometries perform better. Surprisingly, only deep models are capable of exploiting these better strategies, while shallow models default to the symmetric ones. We give evidence that the previous results, which suggest uniform geometries are the best for the stated task, stem from the architectural choices made by the engineers rather than from the task itself.
 
 # Setup
 
@@ -15,7 +15,7 @@ We will be working with the following toy setup:
 
 $$ x_i = b_i u_i, \quad b_i \sim \mathrm{Bernoulli}(p), \quad u_i \sim \mathcal{U}[0, 1]. $$
 
-- The models consist of a linear encoder layer with a bottleneck compressing the input features to a 2D plane, followed by one or more MLPs with a bilinear activation function:
+- The models consist of a linear encoder layer with a bottleneck compressing the input features to a 2D plane, followed by one or more MLPs with a bilinear activation function ([Sharkey, 2023](https://arxiv.org/abs/2305.03452); [Pearce et al., 2025](https://arxiv.org/abs/2410.08417)):
 
 $$ \hat{x} = \mathrm{MLP}(\dots \mathrm{MLP}(\mathrm{Enc}(x)) \dots). $$
 
@@ -256,7 +256,11 @@ The remaining gap of about $18\%$ is therefore not a matter of training length, 
 
 # Discussion
 
+The main lesson of this work is that the geometry of superposition is shaped not only by the task, but also by the expressivity of the model at hand. The same data-generating process leads to symmetric antipodal pairs when the network consists of a linear encoder followed by a single bilinear MLP (or when it is the tied ReLU model, which decodes with the transpose of its own encoder matrix followed by a ReLU), while with more bilinear MLPs we obtain non-symmetric geometries. Uniform geometries are therefore not a fact about superposition itself, but a fact about shallow decoders.
 
+Prior work itself hints at this reading. *Toy Models of Superposition* observes deformed, non-uniform geometries only when the features themselves are non-uniform — differing in importance or sparsity, or correlated — while for identical features it finds uniform polytopes. Its authors, however, [remark](https://transformer-circuits.pub/2022/toy_model/index.html#geometry) that this structure "seems 'too elegant to be true'" and that "there's a good chance it's at least partly idiosyncratic to the toy model we're investigating". Our results confirm this suspicion and identify the responsible ingredient: identical features alone do not guarantee uniformity — it also takes a decoder too weak to exploit anything better.
+
+If these lessons carry over to real networks, they matter for interpretability. The computation that follows any internal representation of a large model is deep and expressive — far closer to our four-MLP decoder than to a tied ReLU readout — so there is little reason to expect features to be stored as clean, symmetric structures. In particular, we have seen that asymmetry is a useful strategy rather than an accident: two features of equal importance can be embedded with very different norms, so the length of a feature direction need not be a reliable proxy for its importance. The same holds for tilting: an embedding sitting slightly off its expected direction need not be an imprecision of training, but may be a deliberate adjustment that exploits the interplay between the feature embeddings to lower the overall loss.
 
 ## Limitations and future work
 
@@ -268,7 +272,7 @@ The remaining gap of about $18\%$ is therefore not a matter of training length, 
 
 # Summary
 
-We have demonstrated that uniform polyhedra are not inherently the best solution to the task of reconstructing independent features of equal importance and sparsity. The earlier indications that they might stem from the architectural choices made by the engineers rather than from the task itself.
+We have demonstrated that uniform polytopes are not inherently the best solution to the task of reconstructing independent features of equal importance and sparsity. The earlier indications of their optimality stem from the architectural choices made by the engineers rather than from the task itself.
 
 We have shown two strategies that models can employ to improve on the simple symmetric antipodal embedding of the features: making the embeddings of a pair asymmetric and slightly tilting one of them. Only deeper models can use these strategies, because only their expressivity allows for it.
 
@@ -276,7 +280,7 @@ Finally, we have shown that shallow models are essentially the best possible app
 
 # Acknowledgements
 
-BR would like to thank [Pivotal](https://www.pivotal-research.org/) for their support. This research was carried out during the Pivotal AI Safety Research Fellowship.
+Bartosz Rzepkowski would like to thank [Pivotal](https://www.pivotal-research.org/) for their support. This research was carried out during the Pivotal AI Safety Research Fellowship.
 
 # Appendix: derivation of the closed-form decoder
 
