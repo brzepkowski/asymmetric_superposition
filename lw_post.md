@@ -98,7 +98,7 @@ The first modification is very simple: we make one of the embeddings shorter tha
 
 This has a rather counterintuitive outcome. With this change the prediction error is "poured" into the reconstruction of a single feature; however, measured over both features, the total error turns out to be smaller!
 
-Below we compare the two encodings. In the asymmetric one, $f_1$ is shortened and $f_3$ lengthened so that $|f_3|$ is $4.25$ times $|f_1|$. The top two panels show the closed-form decoders for both features, and the bottom one the MSE these decoders achieve, split into the contributions of the two features.
+Below we compare the two encodings. In the asymmetric one, $f_1$ is shortened and $f_3$ lengthened so that $|f_3|$ is $4.25$ times $|f_1|$. The top two panels show the closed-form decoders for both features (the Appendix extends their derivation to the asymmetric case), and the bottom one the MSE these decoders achieve, split into the contributions of the two features.
 
 ![Symmetric vs asymmetric antipodal pair ($|f_3| / |f_1| = 4.25$): the closed-form decoders for $x_1$ and $x_3$, and the MSE of the best decoder split into the two features' contributions.](figures/asym_compare.png)
 
@@ -284,6 +284,8 @@ Bartosz Rzepkowski would like to thank [Pivotal](https://www.pivotal-research.or
 
 # Appendix: derivation of the closed-form decoder
 
+## The symmetric pair
+
 We derive $\hat{x}_1(s) = \mathbb{E}[x_1 \mid s]$ for the symmetric antipodal pair, where $s = x_1 - x_3$. Recall that each feature is inactive (equal to $0$) with probability $1 - p$ and otherwise uniformly distributed on $[0, 1]$, independently of the other.
 
 The best guess at a reading $s$ is the average of $x_1$ over all the ways of producing that reading, each way weighted by how likely it is. This is the averaging between scenarios of the main text, and it can be written down exactly. Let $c$ stand for the case (neither feature active, feature 1 alone, feature 3 alone, both), $P(c)$ for its prior probability and $\rho_c(s)$ for the density of the readings it produces at $s$. By Bayes' rule, the posterior probability of a case given the reading is
@@ -321,3 +323,48 @@ For $-1 \le s < 0$ it can come from "feature 3 alone", which contributes $x_1 = 
 $$ \hat{x}_1(s) = \frac{p^2 (1+s)\, \frac{1+s}{2}}{p(1-p) + p^2 (1+s)} = \frac{p\,(1+s)^2}{2\,(1 + ps)}. $$
 
 Together with $\hat{x}_1(0) = 0$ this is the formula of the main text.
+
+## The asymmetric pair
+
+The same recipe covers the asymmetric pair, in which the embeddings keep their opposite directions but differ in length. Writing $a = |f_1|$ and $b = |f_3|$ for the lengths of the short and the long embedding, a reading on the pair line is now
+
+$$ s = a x_1 - b x_3 \in [-b, a], $$
+
+and the symmetric case above is recovered at $a = b = 1$. The four cases are the same, and only two ingredients of the computation change: the readings of a single feature spread over segments of different lengths, and the density of the co-active case is no longer a triangle.
+
+- **Neither active**: unchanged, the point mass $(1-p)^2\, \delta(s)$ with the guess $0$.
+- **Feature 1 alone**: the reading $s = a x_1$ is uniform on $(0, a]$, so $\rho_c(s) = 1/a$ there, and $\mathbb{E}[x_1 \mid s, c] = s/a$.
+- **Feature 3 alone**: the reading $s = -b x_3$ is uniform on $[-b, 0)$, so $\rho_c(s) = 1/b$ there, and $\mathbb{E}[x_1 \mid s, c] = 0$.
+- **Both active**: the pair $(x_1, x_3)$ is again uniform on the unit square, but the lines of constant reading, $a x_1 - b x_3 = s$, are no longer parallel to its diagonal. Near the ends of $[-b, a]$ such a line clips a corner of the square, while in the new, middle range $a - b \le s \le 0$ it crosses the square from its left edge to its right edge. This gives three cases. In each of them, the endpoints of the crossing lie on the edges of the square, so they are obtained by fixing the edge's coordinate at $0$ or $1$ and solving $a x_1 - b x_3 = s$ for the other one:
+
+- For $0 < s \le a$ the line runs from $(x_1, x_3) = (\frac{s}{a}, 0)$ to $(1, \frac{a - s}{b})$, so $x_1$ spans $[\frac{s}{a}, 1]$, a range of length $\frac{a - s}{a}$.
+- For $a - b \le s \le 0$ it runs from $(0, \frac{-s}{b})$ to $(1, \frac{a - s}{b})$, so $x_1$ spans the whole $[0, 1]$.
+- For $-b \le s < a - b$ it runs from $(0, \frac{-s}{b})$ to $(\frac{s + b}{a}, 1)$, so $x_1$ spans $[0, \frac{s + b}{a}]$, a range of length $\frac{s + b}{a}$.
+
+Every value of $x_1$ in the span contributes a density of $1/b$ to the reading, because for a fixed $x_1$, as $x_3$ sweeps $[0, 1]$, the reading $s = a x_1 - b x_3$ sweeps uniformly over an interval of readings of length $b$. The density is therefore the length of the span divided by $b$, and instead of the triangle we obtain a trapezoid:
+
+$$ \rho_c(s) = \begin{cases} \dfrac{s + b}{ab} & -b \le s < a - b, \\[1ex] \dfrac{1}{b} & a - b \le s \le 0, \\[1ex] \dfrac{a - s}{ab} & 0 < s \le a. \end{cases} $$
+
+![Left: with both features active, the pair $(x_1, x_3)$ is uniform on the unit square, and each reading $s$ corresponds to one crossing line $a x_1 - b x_3 = s$ (here $b / a = 4.25$, the ratio used in the main text). Right: the length of that crossing, normalized, is the trapezoidal density $\rho_c(s)$ of the co-active case.](figures/appendix_square_asym.png)
+
+As before, given the reading, $x_1$ is uniform over its range on the crossing line, with the mean at the midpoint of the spans listed above:
+
+$$ \mathbb{E}[x_1 \mid s, c] = \begin{cases} \dfrac{s + b}{2a} & -b \le s < a - b, \\[1ex] \dfrac{1}{2} & a - b \le s \le 0, \\[1ex] \dfrac{1}{2} \Big( \dfrac{s}{a} + 1 \Big) & 0 < s \le a. \end{cases} $$
+
+The weighted average then goes through exactly as in the symmetric case, now with three ranges of $s$ to consider.
+
+For $-b \le s < a - b$ the reading can come from "feature 3 alone", which contributes $x_1 = 0$, or from "both":
+
+$$ \hat{x}_1(s) = \frac{p^2\, \frac{s + b}{ab}\, \frac{s + b}{2a}}{p(1-p)\, \frac{1}{b} + p^2\, \frac{s + b}{ab}} = \frac{p\,(s + b)^2}{2a\,\big[(1-p)\,a + p\,(s + b)\big]}. $$
+
+For $a - b \le s < 0$ the same two cases enter, but their densities are now both equal to $1/b$, so the densities cancel and only the priors remain:
+
+$$ \hat{x}_1(s) = \frac{p^2\, \frac{1}{b}\, \frac{1}{2}}{p(1-p)\, \frac{1}{b} + p^2\, \frac{1}{b}} = \frac{p \cdot \frac{1}{2}}{(1-p) + p} = \frac{p}{2}. $$
+
+This is the plateau visible in the asymmetric panel of the main text.
+
+For $0 < s \le a$ the reading can come from "feature 1 alone" or from "both":
+
+$$ \hat{x}_1(s) = \frac{p(1-p)\, \frac{1}{a}\, \frac{s}{a} + p^2\, \frac{a - s}{ab}\, \frac{1}{2} \Big( \frac{s}{a} + 1 \Big)}{p(1-p)\, \frac{1}{a} + p^2\, \frac{a - s}{ab}} = \frac{2b\,(1-p)\,s + p\,(a^2 - s^2)}{2a\,\big[(1-p)\,b + p\,(a - s)\big]}. $$
+
+All three reduce to the formulas of the previous section at $a = b = 1$, with the plateau range collapsing to the single point $s = 0$. As before, the point mass of the inactive case pins $\hat{x}_1(0) = 0$. The reconstruction of the other feature needs no separate derivation: swapping the roles of the two features maps $\hat{x}_3(s)$ onto the same computation with $a$ and $b$ exchanged and $s$ replaced by $-s$.
