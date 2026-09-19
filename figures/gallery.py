@@ -45,6 +45,6 @@ fig.savefig(OUT.with_suffix(".pdf"))
 fig.savefig(OUT.with_suffix(".png"), dpi=200)
 
 print("\n| model | " + " | ".join(name for name, _ in TABLE) + " |")
-for arch in ("relu_tied", "bilinear1", "bilinear", "bilinear3", "bilinear4"):
+for arch in ("relu_tied", "bilinear1", "bilinear2", "bilinear3", "bilinear4"):
     counts = Counter(classify(r["m"]) for r in runs[arch])
     print(f"| {arch} | " + " | ".join(str(sum(counts[k] for k in keys)) for _, keys in TABLE) + " |")

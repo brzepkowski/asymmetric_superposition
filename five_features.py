@@ -2,14 +2,19 @@
 #   python five_features.py search        the free geometry search of "Search for the best strategy"
 #   python five_features.py train [seeds] the strategy-table runs, 20 seeds x 5 archs (checkpoints/n5/)
 #   python five_features.py table         per-run geometries and the per-arch aggregate
+#   python five_features.py plot          all 100 trained encoder geometries (figures/five_geometries)
 import math
 import sys
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import torch
 from scipy.optimize import minimize
 
 import common
-from common import P, binned_fit, load_model, measure, sample_x, sparse_batch, tilt, train
+from common import BLUE, MUTED, ORANGE, P, binned_fit, load_model, measure, sample_x, sparse_batch, tilt, train
 
 common.N = 5
 common.MLP_LAYERS = {a: [(5, 5)] * len(l) for a, l in common.MLP_LAYERS.items()}
@@ -84,3 +89,36 @@ elif mode == "table":
                               for p in m["pairs"]) or "no pairs"
             print(f"{arch:9s} seed {int(path.parent.name[4:]):2d}  mse {mse:.4f}  norms {norms}  {pairs}")
         print(f"{arch}: " + ", ".join(f"{k}: {v}" for k, v in sorted(counts.items())) + "\n")
+elif mode == "plot":
+    TITLES = {"bilinear1": "1 bilinear MLP", "bilinear2": "2 bilinear MLPs", "bilinear3": "3 bilinear MLPs",
+              "bilinear4": "4 bilinear MLPs", "relu_tied": "tied ReLU"}
+    torch.manual_seed(9999)
+    X = sparse_batch(65536, 5, P)
+    fig, axes = plt.subplots(10, 10, figsize=(16, 17), layout="constrained")
+    for r, arch in enumerate(common.ARCHES):
+        for k, path in enumerate(sorted((ROOT / arch).glob("seed*/model.pt"), key=lambda p: int(p.parent.name[4:]))):
+            model = load_model(path)
+            with torch.no_grad():
+                mse = torch.nn.functional.mse_loss(model(X), X).item()
+            W = model.w_enc.detach()
+            ax = axes[2 * r + k // 10, k % 10]
+            color = {i: MUTED for i in range(5)}
+            for pair, c in zip(measure(W)["pairs"], (BLUE, ORANGE)):
+                color[pair["pair"][0]] = color[pair["pair"][1]] = c
+            lim = 1.3 * W.abs().max().item()
+            for i in range(5):
+                ax.annotate("", xy=(W[0, i].item(), W[1, i].item()), xytext=(0, 0),
+                            arrowprops=dict(arrowstyle="-|>", color=color[i], lw=1.5, shrinkA=0, shrinkB=0))
+                ax.text(1.16 * W[0, i].item(), 1.16 * W[1, i].item(), f"$f_{i + 1}$", color=color[i],
+                        fontsize=7, ha="center", va="center")
+            ax.axhline(0, color=MUTED, lw=0.4, alpha=0.5, zorder=0)
+            ax.axvline(0, color=MUTED, lw=0.4, alpha=0.5, zorder=0)
+            ax.set_xlim(-lim, lim)
+            ax.set_ylim(-lim, lim)
+            ax.set_aspect("equal")
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_title(f"seed {k}, mse {mse:.4f}", fontsize=8)
+        axes[2 * r, 0].set_ylabel(TITLES[arch], fontsize=12)
+    fig.savefig("figures/five_geometries.pdf")
+    fig.savefig("figures/five_geometries.png", dpi=200)

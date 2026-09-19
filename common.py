@@ -16,7 +16,7 @@ BLUE, ORANGE, AQUA, PBLUE = "#2a78d6", "#eb6834", "#1baf7a", "#3A82B5"
 BLUE_RAMP = ["#86b6ef", "#3987e5", "#1c5cab", "#0d366b"]
 
 N, D, P, STEPS = 4, 2, 0.2, 20_000
-MLP_LAYERS = {"bilinear1": [(N, N)], "bilinear": [(N, N)] * 2, "bilinear3": [(N, N)] * 3, "bilinear4": [(N, N)] * 4}
+MLP_LAYERS = {"bilinear1": [(N, N)], "bilinear2": [(N, N)] * 2, "bilinear3": [(N, N)] * 3, "bilinear4": [(N, N)] * 4}
 ARCHES = tuple(MLP_LAYERS) + ("relu_tied",)
 SEEDS = range(20)
 CKPT = Path("checkpoints")
