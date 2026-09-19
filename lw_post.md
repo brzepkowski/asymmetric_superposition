@@ -202,6 +202,10 @@ Below we compare it with the best fits from the function classes of our models. 
 
 ![The reconstruction of feature 3 along the cut: the unconstrained decoder (grey) spikes over the strip. The tied ReLU stays at zero, the quadratic and quartic classes barely react, the degree-8 class responds with a broad bump, and only the degree-16 class approximates the spike.](figures/opened_decoded.png)
 
+The cut shows only a one-dimensional slice of each decoder. Below we plot the same functions over the whole reading plane, with the cut and the strip drawn on top.
+
+![The functions of the previous figure as surfaces over the reading plane.](figures/opened_3d.png)
+
 # How well do the models approximate the best decoder?
 
 We have given indications of why the models may or may not use different strategies to improve their performance in superposition. But how close do the trained models actually come to these theoretical results?

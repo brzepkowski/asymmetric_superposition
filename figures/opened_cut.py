@@ -3,19 +3,25 @@
 #                      through the thin (f1, f3) strip
 #   opened_decoded  -- the reading of feature 3 along that cut: the unconstrained decoder
 #                      and the best fit from each polynomial class and the tied ReLU
+#   opened_3d       -- each of those functions as a 3D surface over the hidden plane,
+#                      with the cut and the strip drawn on top, viewed from the f1 side
+#                      (f1 facing the reader, f2 right, f4 left)
 # Run from the repo root: python -m figures.opened_cut
 import math
-from itertools import combinations
+from itertools import combinations, product
 from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from matplotlib.patches import Polygon
+from matplotlib.path import Path as MplPath
+from scipy.spatial import ConvexHull
 
-from common import AQUA, BLUE, BLUE_RAMP, MUTED, ORANGE, P, PBLUE, oracle_xhat, parallelogram, poly_predictor, sample_x
+from common import AQUA, BLUE, BLUE_RAMP, INK, MUTED, ORANGE, P, PBLUE, oracle_xhat, parallelogram, poly_predictor, sample_x
 
 OUT = Path("figures")
 EPS, CUT_X, M, SEED = 25.0, 0.6, 2 ** 17, 31
@@ -80,3 +86,37 @@ ax.spines[["top", "right"]].set_visible(False)
 ax.legend(frameon=False, fontsize=9.5, loc="upper right")
 fig.savefig(OUT / "opened_decoded.pdf")
 fig.savefig(OUT / "opened_decoded.png", dpi=200)
+
+GRID = 200
+verts = torch.tensor(list(product((0.0, 1.0), repeat=4))) @ W.T
+lo, hi = verts.min(0).values, verts.max(0).values
+G1, G2 = torch.meshgrid(*(torch.linspace(lo[d], hi[d], GRID) for d in range(2)), indexing="ij")
+pts = torch.stack([G1.flatten(), G2.flatten()], 1)
+hull = verts[ConvexHull(verts.numpy()).vertices]
+inside = torch.from_numpy(MplPath(hull.numpy()).contains_points(pts.numpy()))
+
+preds = [("unconstrained decoder $\\hat{x}_3$", lambda q: oracle_xhat(W, q)[:, 2])]
+preds += [(lbl, (lambda f: lambda q: f(q)[:, 2])(poly_predictor(z, x, deg))) for deg, lbl in CLASSES]
+preds += [("tied ReLU", lambda q: torch.relu(g * (q @ W[:, 2]) + b))]
+
+fig = plt.figure(figsize=(15, 8.8), layout="constrained")
+for n, (lbl, f) in enumerate(preds):
+    Z = f(pts).clamp(-0.1, 1.1).masked_fill(~inside, float("nan")).view(GRID, GRID)
+    ax = fig.add_subplot(2, 3, n + 1, projection="3d", computed_zorder=False)
+    ax.plot_surface(G1.numpy(), G2.numpy(), np.ma.masked_invalid(Z.numpy()), cmap="viridis",
+                    vmin=-0.1, vmax=1.0, lw=0, antialiased=False, rcount=GRID, ccount=GRID, zorder=1)
+    yc = f(cut)
+    on = (ts >= 0) & (ts <= strip)
+    ax.plot(cut[:, 0], cut[:, 1], yc + 0.01, color="black", lw=1.4, zorder=3)
+    ax.plot(cut[on, 0], cut[on, 1], yc[on] + 0.01, color=ORANGE, lw=3.2, zorder=4)
+    for i, (fx, fy) in F.items():
+        ax.plot([0, fx], [0, fy], [-0.1, -0.1], color=INK, lw=0.9, zorder=0)
+        ax.text(1.15 * fx, 1.15 * fy, -0.1, f"$f_{i}$", fontsize=10, ha="center", va="center")
+    ax.set_zlim(-0.1, 1.05)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_zticks([0, 0.5, 1])
+    ax.view_init(elev=30, azim=0)
+    ax.set_title(lbl, fontsize=11)
+fig.savefig(OUT / "opened_3d.pdf")
+fig.savefig(OUT / "opened_3d.png", dpi=200)
