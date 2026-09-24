@@ -1,7 +1,7 @@
 # One pair slightly opened (f3 tilted by EPS degrees off the antipode of f1), the other closed.
 #   opened_geometry -- the embeddings, the co-active parallelograms, and a vertical cut
 #                      through the thin (f1, f3) strip
-#   opened_decoded  -- the reading of feature 3 along that cut: the unconstrained decoder
+#   opened_decoded  -- the reading of feature 3 along that cut: the binned decoder
 #                      and the best fit from each polynomial class and the tied ReLU
 #   opened_3d       -- each of those functions as a 3D surface over the hidden plane,
 #                      with the cut and the strip drawn on top, viewed from the f1 side
@@ -21,10 +21,11 @@ from matplotlib.patches import Polygon
 from matplotlib.path import Path as MplPath
 from scipy.spatial import ConvexHull
 
-from common import AQUA, BLUE, BLUE_RAMP, INK, MUTED, ORANGE, P, PBLUE, oracle_xhat, parallelogram, poly_predictor, sample_x
+from common import AQUA, BLUE, BLUE_RAMP, INK, MUTED, ORANGE, P, PBLUE, binned_fit, parallelogram, poly_predictor, sample_x
 
 OUT = Path("figures")
 EPS, CUT_X, M, SEED = 25.0, 0.6, 2 ** 17, 31
+MB, BINS = 2 ** 26, 384  # the grey benchmark: the binned decoder on the reading plane
 CLASSES = ((2, "single bilinear MLP (quadratic)"), (4, "two bilinear MLPs (quartic)"),
            (8, "three bilinear MLPs (degree 8)"), (16, "four bilinear MLPs (degree 16)"))
 
@@ -60,6 +61,8 @@ fig.savefig(OUT / "opened_geometry.png", dpi=200)
 W = torch.tensor([F[i] for i in (1, 2, 3, 4)]).T
 x = sample_x(M, P, torch.Generator().manual_seed(SEED))
 z = x @ W.T
+xb = sample_x(MB, P, torch.Generator().manual_seed(SEED))
+binned = binned_fit(xb @ W.T, xb, BINS)
 ts = torch.linspace(-0.2, 0.95, 400)
 cut = torch.stack([torch.full_like(ts, CUT_X), ts], 1)
 # tied ReLU: x3_hat = relu(g * f3.z + b), scale g and bias b fitted on the whole plane
@@ -74,7 +77,7 @@ _, g, b = best
 fig, ax = plt.subplots(figsize=(6.0, 3.8), layout="constrained")
 ax.axvspan(0, strip, color=ORANGE, alpha=0.25, lw=0)
 ax.text(strip / 2, 0.4, "the strip", color=ORANGE, ha="center", va="top")
-ax.plot(ts, oracle_xhat(W, cut)[:, 2], color=MUTED, lw=3.5, label="unconstrained decoder $\\hat{x}_3$")
+ax.plot(ts, binned(cut)[:, 2], color=MUTED, lw=3.5, label="binned decoder $\\hat{x}_3$")
 for (deg, lbl), color in zip(CLASSES, BLUE_RAMP):
     ax.plot(ts, poly_predictor(z, x, deg)(cut)[:, 2], color=color, lw=2.2, label=lbl)
 ax.plot(ts, torch.relu(g * (cut @ W[:, 2]) + b), color=AQUA, lw=2.2, label="tied ReLU")
@@ -87,7 +90,7 @@ ax.legend(frameon=False, fontsize=9.5, loc="upper right")
 fig.savefig(OUT / "opened_decoded.pdf")
 fig.savefig(OUT / "opened_decoded.png", dpi=200)
 
-GRID = 200
+GRID = 300
 verts = torch.tensor(list(product((0.0, 1.0), repeat=4))) @ W.T
 lo, hi = verts.min(0).values, verts.max(0).values
 G1, G2 = torch.meshgrid(*(torch.linspace(lo[d], hi[d], GRID) for d in range(2)), indexing="ij")
@@ -95,7 +98,7 @@ pts = torch.stack([G1.flatten(), G2.flatten()], 1)
 hull = verts[ConvexHull(verts.numpy()).vertices]
 inside = torch.from_numpy(MplPath(hull.numpy()).contains_points(pts.numpy()))
 
-preds = [("unconstrained decoder $\\hat{x}_3$", lambda q: oracle_xhat(W, q)[:, 2])]
+preds = [("binned decoder $\\hat{x}_3$", lambda q: binned(q)[:, 2])]
 preds += [(lbl, (lambda f: lambda q: f(q)[:, 2])(poly_predictor(z, x, deg))) for deg, lbl in CLASSES]
 preds += [("tied ReLU", lambda q: torch.relu(g * (q @ W[:, 2]) + b))]
 

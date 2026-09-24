@@ -5,7 +5,7 @@
 import json
 import math
 from collections import Counter
-from itertools import combinations, combinations_with_replacement
+from itertools import combinations_with_replacement
 from pathlib import Path
 
 import numpy as np
@@ -462,38 +462,6 @@ def poly_predictor(z, x, degree):
 
     sol = torch.linalg.lstsq(basis(z), x.double()).solution  # ((degree+1)(degree+2)/2, k)
     return lambda zz: (basis(zz) @ sol).float()  # (m, k)
-
-
-def oracle_xhat(W, z):
-    # the unconstrained decoder to leading order in p: a reading on an embedding line is read as that
-    # feature alone; any other reading is the density-weighted average over the pairs of features whose
-    # parallelogram contains it
-    xhat = torch.zeros(len(z), N)
-    resolved = z.norm(dim=1) < 1e-9
-    for i in range(N):
-        w = W[:, i]
-        n2 = w @ w
-        t = (z @ w) / n2
-        on = (~resolved) & ((z[:, 0] * w[1] - z[:, 1] * w[0]).abs() < 1e-6 * n2.sqrt()) \
-            & (t >= -1e-9) & (t <= 1 + 1e-9)
-        xhat[on, i] = t[on]
-        resolved = resolved | on
-    wsum = torch.zeros(len(z))
-    acc = torch.zeros(len(z), N)
-    for i, j in combinations(range(N), 2):
-        M = torch.stack([W[:, i], W[:, j]], 1)
-        Dt = torch.det(M).abs()
-        if Dt < 1e-9:
-            continue
-        u = z @ torch.linalg.inv(M).T
-        inside = (~resolved) & (u >= -1e-9).all(1) & (u <= 1 + 1e-9).all(1)
-        wgt = inside.float() / Dt
-        wsum += wgt
-        acc[:, i] += wgt * u[:, 0]
-        acc[:, j] += wgt * u[:, 1]
-    mix = (~resolved) & (wsum > 0)
-    xhat[mix] = acc[mix] / wsum[mix, None]
-    return xhat
 
 
 def bayes2d(z, x, bins=64):  # MSE of the binned decoder on the reading plane (bins in the whitened frame)
