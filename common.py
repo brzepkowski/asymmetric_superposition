@@ -386,44 +386,82 @@ def class_fit(kind, s, Y, a, b, grid):
     # independently from the precomputed stats, and the g with the lowest summed MSE wins.
     best = None
     for g in torch.logspace(-1.5, 1.5, 61).tolist():
-        tot, prs, mses = 0.0, [], []
+        total_mse, params, mses = 0.0, [], []
         for i, (sig, slope) in enumerate(((1.0, g * a), (-1.0, g * b))):
             eyh, ehh = stats[sig]
             # the MSE expansion above, evaluated for all 221 thresholds at once:
             # m is (221,), entry k = this feature's MSE at threshold cs[k] under the current slope
             m = ey2[i] - 2 * slope * eyh[i] + slope ** 2 * ehh
             k = m.argmin().item()
-            tot += m[k].item()
-            prs.append((sig, slope, cs[k].item()))
+            total_mse += m[k].item()
+            params.append((sig, slope, cs[k].item()))
             mses.append(m[k].item())
-        if best is None or tot < best[0]:
-            best = (tot, prs, mses)
-    _, prs, mses = best
+        if best is None or total_mse < best[0]:
+            best = (total_mse, params, mses)
+    _, params, mses = best
     # Evaluate the two winning hinges on the plotting grid; return the curves and the
     # per-feature MSEs, the same shape the polynomial branch returns.
-    F = torch.stack([slope * torch.relu(sig * (grid - c)) for sig, slope, c in prs], 1)  # (len(grid), 2)
+    F = torch.stack([slope * torch.relu(sig * (grid - c)) for sig, slope, c in params], 1)  # (len(grid), 2)
     return F, torch.tensor(mses)  # (len(grid), 2), (2,)
 
 
-def poly_predictor(z, x, degree):  # least-squares polynomial of total degree `degree` on the reading plane
-    zmin, zmax = z.min(0).values, z.max(0).values
+def poly_predictor(z, x, degree):
+    """The best decoder of a polynomial class on the 2D reading plane: fits, by least squares,
+    one polynomial of total degree at most `degree` in the two plane coordinates per feature.
+    This is the ceiling for a bilinear stack on a fixed geometry, since k bilinear MLPs can only
+    implement a polynomial of degree 2^k in the reading. Inputs:
+      - `z`: the sampled readings, (M, 2), with M the size of the training sample.
+      - `x`: the features behind those readings, (M, k) — one fitted polynomial per column.
+      - `degree`: the class's total degree (2 for one bilinear MLP, 16 for four).
+    Returns a predictor zz (m, 2) -> xhat (m, k), where m is the number of query points —
+    arbitrary, and distinct from M: the predictor is evaluated on the sample (m = M) as well
+    as on plotting grids. Because the class is linear in its
+    coefficients, the lstsq solution is exactly the best decoder of the class on the sample —
+    and, the fit being over samples, best in the density-weighted sense: it is the closest
+    polynomial to E[x | z] where the readings actually land.
+    """
+    zmin, zmax = z.min(0).values, z.max(0).values  # (2,) each: the training range, reused at evaluation
 
     def basis(zz):
-        z01 = (2 * (zz - zmin) / (zmax - zmin) - 1).double()
-        T = [torch.ones_like(z01), z01]
+        """The design matrix at m query points zz (m, 2): one row per point, one column per
+        basis polynomial — the products of Chebyshev polynomials with total degree at most
+        `degree`, evaluated after mapping zz onto [-1, 1]^2. Returns (m, (degree+1)(degree+2)/2).
+        Called twice: at fit time on the training sample z (so m = M there), and inside the
+        returned predictor on arbitrary points — with the same zmin/zmax mapping in both,
+        so the fitted coefficients keep their meaning.
+        """
+        # each coordinate mapped affinely onto [-1, 1] over the training range (outside it the
+        # Chebyshev argument leaves [-1, 1] and a high-degree polynomial explodes, so evaluation
+        # is only meaningful on the data's support)
+        z01 = (2 * (zz - zmin) / (zmax - zmin) - 1).double()  # (m, 2)
+        # the Chebyshev recurrence T_0 = 1, T_1 = u, T_{n+1} = 2 u T_n - T_{n-1}. Since z01
+        # holds both coordinates and the recurrence is applied to it elementwise, each entry
+        # T[e] is an (m, 2) tensor: its column v holds the degree-e polynomial evaluated at
+        # the rescaled coordinate v of every point. So T[e][:, v] below reads "T_e(u_v) at
+        # each of the m points" — the factors the basis columns are assembled from.
+        T = [torch.ones_like(z01), z01]  # degree+1 entries of (m, 2)
         for _ in range(degree - 1):
             T.append(2 * z01 * T[-1] - T[-2])
+        # the 2D basis. A polynomial in two variables of total degree <= `degree` is a linear
+        # combination of the monomials u0^i u1^j with i + j <= degree, so one basis function is
+        # needed per pair (i, j). Here the monomial of each pair is replaced by T_i(u0) T_j(u1),
+        # which has the same degrees and spans the same space, but is better conditioned. The
+        # loops enumerate the pairs: for every total degree deg, combinations_with_replacement
+        # lists the ways deg units of degree can be split between the two coordinates — the
+        # tuple (0, 0, 1), say, gives two units to coordinate 0 and one to coordinate 1, so
+        # Counter turns it into {0: 2, 1: 1}, i.e. (i, j) = (2, 1), and the inner loop
+        # multiplies the factors into the column T_2(u0) * T_1(u1).
         cols = []
         for deg in range(degree + 1):
             for c in combinations_with_replacement(range(2), deg):
-                col = torch.ones(len(zz), dtype=torch.float64)
+                col = torch.ones(len(zz), dtype=torch.float64)  # (m,)
                 for v, e in Counter(c).items():
                     col = col * T[e][:, v]
                 cols.append(col)
-        return torch.stack(cols, 1)
+        return torch.stack(cols, 1)  # (m, (degree+1)(degree+2)/2): 6 columns for degree 2, 153 for 16
 
-    sol = torch.linalg.lstsq(basis(z), x.double()).solution
-    return lambda zz: (basis(zz) @ sol).float()
+    sol = torch.linalg.lstsq(basis(z), x.double()).solution  # ((degree+1)(degree+2)/2, k)
+    return lambda zz: (basis(zz) @ sol).float()  # (m, k)
 
 
 def oracle_xhat(W, z):
