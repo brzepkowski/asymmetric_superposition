@@ -1,7 +1,7 @@
 # Does more asymmetry keep helping? The MSE of the best decoder of one antipodal pair as a function of
 # the length ratio r = |f3| / |f1| (long f3, short f1; s = |f1| x1 - |f3| x3):
-#   left  -- the closed-form decoder, total and split into the x1 and x3 contributions (its MSE by quadrature)
-#   right -- the closed form against binned decoders of a few resolutions (bins over the segment)
+#   top    -- the closed-form decoder, total and split into the x1 and x3 contributions (its MSE by quadrature)
+#   bottom -- the closed form against binned decoders of a few resolutions (bins over the segment)
 # Run from the repo root: python -m figures.asym_sweep
 from pathlib import Path
 
@@ -26,21 +26,60 @@ x3 = (torch.rand(M, generator=g) < P) * torch.rand(M, generator=g)
 X = torch.stack([x1, x3], 1)
 
 
-def closed(r):  # exact MSE of the closed-form decoder: E[x^2] - E[xhat(s)^2] over the density of s (s = 0 contributes nothing)
-    a, b = r ** 0.5, r ** -0.5
-    dens = lambda s: P * (1 - P) * ((0 < s < b) / b + (-a < s < 0) / a) + P * P * max(0.0, min(1.0, (s + a) / b) - max(0.0, s / b)) / a
+def closed(r):
+    """The exact MSE of the closed-form decoder on the pair with length ratio r, by numerical
+    integration, returned as the (x1, x3) contributions separately. It evaluates
+        MSE = E[(x - xhat(s))^2] = E[x^2] - 2 E[x * xhat(s)] + E[xhat(s)^2]
+    term by term: E[x^2] = p/3 for a feature x = Bernoulli(p) * U[0, 1], and the two terms
+    with xhat are integrals of xhat over the density of the reading. The point mass at
+    s = 0 contributes nothing to them, since xhat(0) = 0.
+    """
+    a, b = r ** 0.5, r ** -0.5  # |f3| (long) and |f1| (short), product 1; the reading is s = b x1 - a x3
+
+    def density(s):  # the continuous part of the reading's density (the s = 0 atom left out)
+        f1_alone = P * (1 - P) * (0 < s < b) / b  # s = b x1: uniform on (0, b)
+        f3_alone = P * (1 - P) * (-a < s < 0) / a  # s = -a x3: uniform on (-a, 0)
+        # both active: every admissible x1 contributes density 1/a, and x1 is admissible when
+        # x3 = (b x1 - s)/a stays inside [0, 1], i.e. on [s/b, (s + a)/b] clipped to [0, 1]
+        x1_span = max(0.0, min(1.0, (s + a) / b) - max(0.0, s / b))
+        return f1_alone + f3_alone + P * P * x1_span / a
+
+    # the integrands have kinks where the density's pieces begin and end (s = -a, b - a, 0, b),
+    # so quad integrates each smooth stretch between consecutive knots separately
     knots = sorted({-a, min(0.0, b - a), 0.0, b})
+    integral = lambda f: sum(quad(f, lo, hi)[0] for lo, hi in zip(knots, knots[1:]))
     mse = []
-    for w, v in ((b, -a), (-a, b)):
-        f = lambda s: posterior_mean(torch.tensor([s], dtype=torch.float64), w, v, P).item() ** 2 * dens(s)
-        mse.append(P / 3 - sum(quad(f, lo, hi)[0] for lo, hi in zip(knots, knots[1:])))
+    for w, v in ((b, -a), (-a, b)):  # the signed levers of x1 and of x3, as posterior_mean takes them
+        xhat = lambda s: posterior_mean(torch.tensor([s], dtype=torch.float64), w, v, P).item()
+        e_x2 = P / 3  # E[x^2] of a Bernoulli(p) * U[0, 1] feature: p * integral of u^2 du = p/3
+        e_xhat2 = integral(lambda s: xhat(s) ** 2 * density(s))  # E[xhat(s)^2]
+        # E[x * xhat(s)]: averaging x at a fixed reading turns it into E[x | s], which is xhat(s)
+        # itself, so the cross term equals the E[xhat(s)^2] integral computed above
+        e_x_xhat = e_xhat2
+        mse.append(e_x2 - 2 * e_x_xhat + e_xhat2)
     return tuple(mse)
 
 
-def binned(r, n_bins):  # bins of equal width over the segment [-|f3|, |f1|]; exact-zero readings are a bin of their own
+def binned(r, n_bins):
+    """The MSE of the binned decoder on one antipodal pair, fitted and scored on the module's
+    fixed sample of M draws. Inputs:
+      - `r`: the pair's length ratio |f3| / |f1| (the levers are a, b = r**0.5, r**-0.5).
+      - `n_bins`: the number of bins of equal width covering the reading segment [-|f3|, |f1|].
+    Each feature is decoded by the mean of its values over the samples in a bin, both features
+    sharing the same bins. The exact-zero readings (the "neither active" atom) are kept out of
+    the bins and predicted 0, matching the closed form's xhat(0) = 0. Returns the two features'
+    MSEs summed, as the bottom panel reports them.
+    """
     a, b = r ** 0.5, r ** -0.5
     s = b * x1 - a * x3
     nz = s != 0
+    # the bin of each nonzero reading, as an affine map:
+    #   - s[nz] lives in the segment [-a, b]; + a shifts it to [0, a + b] (the distance from
+    #     the left end), / (a + b) normalizes it to [0, 1] (the fraction of the way along the
+    #     segment), * n_bins rescales it to [0, n_bins] (the position in bin-widths)
+    #   - .long() cuts the fractional part (the values are >= 0, so truncation = floor)
+    #   - .clamp guards the boundary: a reading of exactly b maps to n_bins, one past the last
+    #     bin, and is folded into it (the lower bound 0 cannot be hit)
     idx = ((s[nz] + a) / (a + b) * n_bins).long().clamp(0, n_bins - 1)
     cnt = torch.zeros(n_bins).index_add_(0, idx, torch.ones(int(nz.sum())))
     mean = torch.zeros(n_bins, 2).index_add_(0, idx, X[nz]) / cnt.clamp(min=1)[:, None]

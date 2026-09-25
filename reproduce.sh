@@ -2,6 +2,7 @@
 # Rebuilds every figure and number of lw_post.md. Run from this directory.
 # Needs: python with torch, numpy, scipy, matplotlib, pillow; lualatex (fontspec, tikz); pdftoppm; pandoc.
 set -e
+export SOURCE_DATE_EPOCH=0  # fixed timestamp inside the generated PDFs (matplotlib and lualatex honor it), so reruns are byte-identical
 PY=${PY:-$HOME/miniforge3/envs/pivotal/bin/python}
 
 $PY check_posteriors.py  # the piecewise posteriors agree with posterior_mean
