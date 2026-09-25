@@ -20,6 +20,16 @@ N_SAMPLES, SEED = 4096, 0
 
 
 def frame(ax, marks=True, guide=True, lo=-1.0, hi=1.0, xticks=(-1, -0.5, 0, 0.5, 1)):
+    """The shared dressing of every pair-decoder plot, so the figures of this file (and the
+    panels of asym_compare, which imports it) all sit on the same frame: x-label s, fixed
+    y-range [0, 1] with its ticks, no top/right spines. Options:
+      - marks: the discontinuity markers at s = 0 — an open circle at the one-sided limit
+        p/2, a filled one at the value 0. Correct for the symmetric pair only; a caller
+        with other levers (asym_compare) passes False and draws its own.
+      - guide: the dashed horizontal guide at p/2 with its label.
+      - lo, hi: the reading's range (-a, b); sets the x-limits with a small margin.
+      - xticks: the x tick positions, for callers whose range is not [-1, 1].
+    """
     if marks:
         ax.plot([0], [P / 2], "o", ms=6.5, mfc="white", mec="black", mew=1.6, zorder=4)
         ax.plot([0], [0], "o", ms=6.5, color="black", zorder=5)
@@ -66,6 +76,14 @@ if __name__ == "__main__":
     CASES = ((0, "black", "neither active"), (1, BLUE, "only feature 1 active"),
              (2, ORANGE, "only feature 3 active"), (3, "#2CA02C", "both active"))
     fig, ax = new_fig()
+    #   - x is the (N_SAMPLES, 2) sample matrix drawn above: column 0 holds each sample's x1,
+    #     column 1 its x3.
+    #   - m = case == c is a boolean mask selecting the rows belonging to the case being drawn —
+    #     neither / only feature 1 / only feature 3 / both.
+    #   - x[m, 0] - x[m, 1] is those samples' reading s = x1 - x3 (unit levers here, so no a, b
+    #     factors) — the horizontal coordinate.
+    #   - x[m, 0] is those samples' true x1 — the vertical coordinate, the value the decoder is
+    #     supposed to recover from s.
     for c, color, _ in CASES:
         m = case == c
         ax.scatter(x[m, 0] - x[m, 1], x[m, 0], s=9, color=color, alpha=0.35, lw=0, zorder=4 - c)
@@ -79,15 +97,32 @@ if __name__ == "__main__":
     # binned conditional means of the same samples, over the closed-form curve;
     # the exact-zero readings (the "neither active" atom) are a bin of their own
     N_BINS = 100
+    # every sample's reading and true x1 — the same coordinates as the scatter, all cases together
     s_all, x1_all = x[:, 0] - x[:, 1], x[:, 0]
+    # N_BINS equal bins over the reading's range [-1, 1], described by their N_BINS + 1 edges
     edges = np.linspace(-1, 1, N_BINS + 1)
+    # the samples with reading exactly 0 (the "neither active" atom) are held out of the bins
     nz = s_all != 0
+    #   - idx is aligned with s_all[nz], not s_all: the exact-zero readings are masked out before
+    #     digitizing, so idx has one entry per nonzero reading — which is why the means line below
+    #     selects x1_all[nz] first and only then applies idx == b.
+    #   - digitize returns the index of the bin each reading belongs to, counting the bins from 1,
+    #     so the -1 makes it a 0-based index.
+    #   - the value b in a cell means "this reading lies in bin b", the interval from edges[b] to
+    #     edges[b+1] (100 bins, 101 edges) — an index usable directly into means. E.g. if the 5th
+    #     nonzero reading is s = -0.97, then idx[4] = 1: bin 1 spans [-0.98, -0.96), and that
+    #     reading's x1 is averaged into means[1].
+    #   - the clip guards one boundary case: a reading of exactly 1.0 sits on the last edge and
+    #     would index one past the last bin.
     idx = np.clip(np.digitize(s_all[nz], edges) - 1, 0, N_BINS - 1)
+    # the binned decoder: the mean of x1 over the samples in each bin
     means = np.array([x1_all[nz][idx == b].mean() for b in range(N_BINS)])
     fig, ax = new_fig()
     for s in arms(1.0, 1.0):
         ax.plot(s, x1_posterior(s, 1.0, 1.0), color="black", lw=2.5, zorder=3)
+    # the binned means as a step function over the closed-form curve
     ax.stairs(means, edges, baseline=None, color=BLUE, lw=2, zorder=4)
+    # the held-out atom: one dot at s = 0, the mean x1 of the exact-zero readings
     ax.plot([0], [x1_all[~nz].mean()], "o", ms=6.5, color=BLUE, zorder=6)
     frame(ax)
     ax.set_ylabel("$\\hat{x}_1(s)$")

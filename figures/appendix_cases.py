@@ -16,8 +16,16 @@ OUT = Path("figures/appendix_cases")
 s_neg, s_pos = np.linspace(-1, 0, 200), np.linspace(0, 1, 200)
 s = np.concatenate([s_neg, s_pos])
 w1, w3, w13 = P * (1 - P) * np.ones_like(s_pos), P * (1 - P) * np.ones_like(s_neg), P * P * (1 - np.abs(s))
+# the best guess of each case, E[x1 | s, c]: feature 1 alone produces s = x1, so the reading pins
+# the feature exactly; with both active, the reading only confines x1 to an interval, and the best
+# guess is its midpoint (1 + s)/2 (the appendix's diagonal argument). Feature 3 alone means x1 = 0
 x1_alone, x1_both = s_pos, (1 + s) / 2
-post = np.where(s < 0, P * (1 + s) ** 2 / (2 * (1 + P * s)), (2 * (1 - P) * s + P * (1 - s ** 2)) / (2 * (1 - P * s)))
+# the weighted average of those guesses: the closed-form decoder of the main text, one formula per
+# arm — for s < 0 the reading can come from "feature 3 alone" or "both", for s > 0 from
+# "feature 1 alone" or "both"
+post_neg = P * (1 + s) ** 2 / (2 * (1 + P * s))
+post_pos = (2 * (1 - P) * s + P * (1 - s ** 2)) / (2 * (1 - P * s))
+post = np.where(s < 0, post_neg, post_pos)
 
 plt.rcParams.update({"font.size": 12, "axes.labelsize": 13})
 fig, axes = plt.subplots(1, 2, figsize=(11, 3.8), layout="constrained")

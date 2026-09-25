@@ -20,6 +20,13 @@ CASES = (("symmetric", 1.0, 1.0), ("asymmetric", RATIO ** 0.5, RATIO ** -0.5))  
 
 
 def bill(a, b):
+    """The MSE the best possible decoder (the closed-form
+    posterior) achieves on the pair with lever lengths |f3| = a, |f1| = b, evaluated by
+    Monte Carlo on M samples, returned as the (x1, x3) contributions separately. The fixed
+    seed gives every call identical draws, so the cases compare without sampling noise.
+    At s = 0 the prediction is overridden to 0: a sampled reading of exactly 0 almost
+    always means neither feature was active (the appendix's point mass).
+    """
     g = torch.Generator().manual_seed(SEED)
     x1 = (torch.rand(M, generator=g) < P) * torch.rand(M, generator=g)
     x3 = (torch.rand(M, generator=g) < P) * torch.rand(M, generator=g)
@@ -31,15 +38,25 @@ def bill(a, b):
 
 
 def curves(ax, a, b):
+    # `limits` collects the data for drawing the open circles at s = 0 — the markers of the jump
+    # discontinuity that both posterior curves have there. Mechanically, inside the double loop below
+    # each iteration handles one curve on one arm (2 curves x 2 arms = 4 entries).
+    # y[np.abs(s).argmin()] picks the curve's value at the grid point nearest s = 0 — since
+    # arms() ends its grids 1e-6 short of zero, that's numerically the one-sided limit. Each
+    # entry appended to limits is a pair (limit value rounded to 4 decimals, curve color)
     limits = []
     for s in arms(a, b):
+        # the numpy posteriors, since the grids are numpy (bill() scores torch samples, so it uses posterior_mean)
         for f, color in ((x1_posterior, BLUE), (x3_posterior, ORANGE)):
             y = f(s, a, b)
             ax.plot(s, y, color=color, lw=2.5, zorder=3)
             limits.append((round(float(y[np.abs(s).argmin()]), 4), color))
-    for v in {v for v, _ in limits}:  # one-sided limits at s = 0: open circles, black where the curves coincide
-        colors = {c for w, c in limits if w == v}
-        ax.plot([0], [v], "o", ms=6.5, mfc="white", mec=colors.pop() if len(colors) == 1 else "black", mew=1.6, zorder=4)
+    # one open circle per distinct limit value; its edge takes the curve's color, or black
+    # when both curves share the same limit
+    for value in {value for value, _ in limits}:
+        curve_colors = {color for limit, color in limits if limit == value}
+        edge_color = curve_colors.pop() if len(curve_colors) == 1 else "black"
+        ax.plot([0], [value], "o", ms=6.5, mfc="white", mec=edge_color, mew=1.6, zorder=4)
     ax.plot([0], [0], "o", ms=6.5, color="black", zorder=5)
 
 
