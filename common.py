@@ -464,32 +464,68 @@ def poly_predictor(z, x, degree):
     return lambda zz: (basis(zz) @ sol).float()  # (m, k)
 
 
-def bayes2d(z, x, bins=64):  # MSE of the binned decoder on the reading plane (bins in the whitened frame)
-    cov = torch.cov(z.T) + 1e-9 * torch.eye(2)
-    zw = z @ torch.linalg.cholesky(torch.linalg.inv(cov))
-    idx = torch.zeros(len(z), dtype=torch.long)
-    for d in range(2):
-        e = torch.linspace(zw[:, d].min(), zw[:, d].max() + 1e-5, bins + 1)
-        idx = idx * bins + (torch.bucketize(zw[:, d], e) - 1).clamp(0, bins - 1)
-    B = bins * bins
-    cnt = torch.zeros(B).index_add_(0, idx, torch.ones(len(z)))
-    mean = torch.zeros(B, x.shape[1]).index_add_(0, idx, x) / cnt.clamp(min=1)[:, None]
-    return (x - mean[idx]).pow(2).mean().item()
-
-
 def binned_fit(z, x, bins):
-    # the binned decoder on the reading plane: bins x bins cells over the range of z, the origin at a cell
-    # centre so that no cell edge runs along an embedding line; returns the cell-mean predictor (a cell
-    # never seen predicts 0)
+    """The binned decoder on the reading plane: an estimate of the best possible decoder
+    E[x | z] built from samples alone (the write-up's "Decoder from data samples alone").
+    The plane is covered with cells of size (range of z) / bins, the grid placed so the
+    origin falls at a cell centre — no cell edge runs along an embedding line, where the
+    readings of single features would straddle two cells. Inputs:
+      - `z`: the sampled readings, (M, 2), with M the size of the training sample.
+      - `x`: the features behind those readings, (M, k).
+      - `bins`: a single integer, the number of cells per axis. The same count covers each
+        axis while the sampled ranges of the two axes generally differ, so the cells are
+        rectangles, not squares.
+    Returns a predictor zz (m, 2) -> xhat (m, k), where m is the number of query points —
+    arbitrary, and distinct from M. A query is answered with the mean of x over the training
+    samples in its cell; a cell no sample landed in predicts 0.
+    
+    A query outside the grid altogether has no cell of its own; the clamps in `flat` snap its lookup to an edge cell
+    rather than index past the table (this only happens at the very border of the plots).
+    """
+    # the cell size per axis, (2,): `bins` cells cover the sampled range of each coordinate
     h = (z.max(0).values - z.min(0).values) / bins
-    cell = torch.floor(z / h + 0.5).long()
-    lo, wide = cell.min(0).values, cell.max(0).values - cell.min(0).values + 1
-    flat = lambda c: ((c - lo).clamp(min=0) * torch.tensor([wide[1], 1])).sum(1).clamp(max=wide.prod() - 1)
-    idx = flat(cell)
-    cnt = torch.zeros(wide.prod()).index_add_(0, idx, torch.ones(len(z)))
-    mean = torch.zeros(wide.prod(), x.shape[1]).index_add_(0, idx, x) / cnt.clamp(min=1)[:, None]
-    return lambda zz: mean[flat(torch.floor(zz / h + 0.5).long())]
+    # each sample's integer cell coordinates, (M, 2); the +0.5 puts the origin at the centre
+    # of cell (0, 0) instead of at a corner where four cells meet
+    cell_coords = torch.floor(z / h + 0.5).long()
+    # lo: the minimal cell coordinate per axis; wide: the count of cells in each of the two
+    # directions. Together they describe the bounding rectangle of the sampled cells, and the
+    # lookup table `mean` (below) has one entry per cell of this rectangle
+    lo, wide = cell_coords.min(0).values, cell_coords.max(0).values - cell_coords.min(0).values + 1
+    n_cells = wide.prod()  # the size of the lookup table: one entry per cell of the rectangle
+
+    # a cell's position in the flat lookup table: shift the coordinates so the rectangle's lowest
+    # cell becomes (0, 0), then count through the rectangle row by row (row * row_length + column).
+    # The two clamps keep a query outside the rectangle from indexing past the table
+    def flat(coords):
+        r = (coords - lo).clamp(min=0)
+        return (r[:, 0] * wide[1] + r[:, 1]).clamp(max=n_cells - 1)
+
+    # build the `mean` table: for every sample i, index_add_ adds its third argument's row i at position
+    # idx[i], so `cnt`` collects each cell's sample count and `sums`` each cell's total of x. Their
+    # ratio is the cell's mean; clamp(min=1) turns an empty cell's 0/0 into 0/1 = 0
+    idx = flat(cell_coords)  # (M,): each training sample's position in the table
+    cnt = torch.zeros(n_cells).index_add_(0, idx, torch.ones(len(z)))  # (n_cells,)
+    sums = torch.zeros(n_cells, x.shape[1]).index_add_(0, idx, x)  # (n_cells, k)
+    mean = sums / cnt.clamp(min=1)[:, None]  # (n_cells, k)
+
+    def predictor(zz):
+        """Called later with m 2D points zz (m, 2) on the reading plane; just extracts from
+        the `mean` table the value stored for each point's cell, (m, k).
+        """
+        cells = torch.floor(zz / h + 0.5).long()  # (m, 2): each query's cell coordinates
+        return mean[flat(cells)]  # flat(cells) is (m,), the rows pulled from mean are (m, k)
+
+    return predictor
 
 
 def parallelogram(u, v):
+    """Given two 2D vectors u and v, returns the four corners of the parallelogram they span,
+    as a plain list of (x, y) tuples:
+      | corner                  | value    | meaning when u = f_i, v = f_j  |
+      |-------------------------|----------|--------------------------------|
+      | (0, 0)                  | origin   | both features at 0             |
+      | tuple(u)                | tip of u | feature i at 1, feature j at 0 |
+      | (u[0]+v[0], u[1]+v[1])  | u + v    | both features at 1             |
+      | tuple(v)                | tip of v | feature i at 0, feature j at 1 |
+    """
     return [(0, 0), tuple(u), (u[0] + v[0], u[1] + v[1]), tuple(v)]
