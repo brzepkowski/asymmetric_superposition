@@ -19,7 +19,17 @@ HAND = {"closed, r = 1": (0.0, 0.0, 0.0, 0.0), "closed, r = 3": (0.0, math.log(1
         "opened 20 deg, r = 2": (20 / 90, math.log(0.5), 20 / 90, math.log(0.5))}
 
 
-def kernel(q):  # q = (angle of f1 off the antipode of f3, in units of 90 deg; log |f1|; the same for f2, f4)
+def kernel(q):
+    """The encoder matrix of one search point. The long embeddings are pinned to the axes,
+    f3 = (-1, 0) and f4 = (0, -1), and `q` describes their free partners with 4 numbers:
+      - q[0]: the angle of f1 off the antipode of f3 (the +x axis), as a fraction of 90 deg —
+        the code multiplies it by 90, so 0 is a closed pair and 1 a right angle
+        (the fraction keeps all four coordinates at comparable scales, which suits Nelder-Mead);
+      - q[1]: log |f1| — the log keeps the length positive and lets the search move
+        multiplicatively (and since |f3| = 1, exp(q[1]) is the pair's short/long ratio);
+      - q[2], q[3]: the same two numbers for f2, measured off the antipode of f4 (the +y axis).
+    Returns the (2, 4) encoder matrix, columns f1, f2, f3, f4, rows the plane's coordinates.
+    """
     t1, t2 = math.radians(q[0] * 90), math.radians(90 + q[2] * 90)
     r1, r2 = math.exp(q[1]), math.exp(q[3])
     return torch.tensor([[r1 * math.cos(t1), r2 * math.cos(t2), -1.0, 0.0],
@@ -36,7 +46,17 @@ def binned_mse(z, x):
     return (x - mean[idx]).pow(2).mean().item()
 
 
-def report(q):  # the pairs as measure() finds them (the search may pair f1 with f4), then the raw vectors
+def report(q):
+    """One line describing the geometry at the search point `q` (rebuilt via kernel, so it
+    can be called on whatever point the optimizer is at).
+    
+    Returns a string of two parts:
+      - the pairs as measure() finds them — "(f1, f3) opened by 20.7 deg, ratio 13.5; ..."
+        — reported rather than assumed, because the search may drift from the nominal
+        pairing (e.g. pair f1 with f4); "no antipodal pairs" when measure finds none;
+      - the raw coordinates of the four embedding vectors.
+    Printing is left to the callers.
+    """
     W = kernel(q)
     pairs = "; ".join(f"(f{p['pair'][0] + 1}, f{p['pair'][1] + 1}) opened by {tilt(p['cos']):.1f} deg, ratio {p['ratio']:.1f}"
                       for p in measure(W)["pairs"]) or "no antipodal pairs"
@@ -51,6 +71,12 @@ g = torch.Generator().manual_seed(3)
 cand = []
 for _ in range(N_RAND):
     u = torch.rand(4, generator=g)
+    # one random candidate, four uniform draws u in [0, 1) stretched onto the search box:
+    #   - angles: 4u - 2 covers [-2, 2) in the fraction-of-90-deg units, i.e. +-180 deg off the
+    #     antipode — the free embeddings can start pointing anywhere in the plane;
+    #   - log-lengths: LO + u (HI - LO) makes the lengths log-uniform between 0.05 and 1.5, as
+    #     much mass on "twenty times shorter than the pinned partner" as on "roughly equal".
+    # A candidate is only screened by obj below; the best N_START become Nelder-Mead starts
     q = [4 * u[0].item() - 2, LO + u[1].item() * (HI - LO), 4 * u[2].item() - 2, LO + u[3].item() * (HI - LO)]
     cand.append((obj(q), q))
 cand.sort(key=lambda t: t[0])

@@ -21,6 +21,14 @@ N_BINS = (24, 48, 96)
 
 
 def W_of(eps):
+    """The full four-feature encoder matrix at opening angle `eps` (degrees), shape (2, 4):
+    two rows (the two coordinates of the plane) and four columns, one per embedding —
+      f1 = (1, 0),  f2 = (0, 1),  f3 = (-cos(eps), sin(eps)),  f4 = (0, -1)
+    — so the tensor literal's inner lists are the x- and the y-coordinates of all four.
+    Only f3's column depends on eps: W_of(0) is the perfect antipodal cross, and increasing
+    eps tilts f3 off the antipode of f1 while the (f2, f4) pair stays closed; W_of(25)
+    reproduces the geometry of opened_cut.py.
+    """
     er = math.radians(eps)
     return torch.tensor([[1.0, 0.0, -math.cos(er), 0.0], [0.0, 1.0, math.sin(er), -1.0]])
 
@@ -29,6 +37,8 @@ x = sample_x(M, P, torch.Generator().manual_seed(SEED))
 x_eval = sample_x(M_EVAL, P, torch.Generator().manual_seed(SEED + 1))
 err = lambda pred: (x_eval - pred).pow(2).mean().item()
 
+# recap: binned_fit returns a function (the cell-mean predictor), so the second bracket pair
+# calls it right away — fitted on the readings of x, queried on the fresh readings of x_eval
 binned = {n: np.array([err(binned_fit(x @ W_of(e).T, x, n)(x_eval @ W_of(e).T)) for e in EPS]) for n in N_BINS}
 for n, c in binned.items():
     print(f"{n:4d} bins: closed {c[0]:.4f}, minimum {c.min():.4f} at {EPS[c.argmin()]} deg, {EPS[-1]} deg {c[-1]:.4f}")
