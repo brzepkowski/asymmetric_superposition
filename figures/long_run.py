@@ -1,6 +1,6 @@
 # The four-MLP model of class_check.py (seed 9, 2^20 samples) trained longer and measured the same way: MSE
-# of the binned decoder of its encoder, of the best polynomial of degree 16, and of the model itself, the MSE
-# gap and the score. Two kinds of runs: retrained from the same initialization over a longer cosine schedule
+# of the binned decoder of its encoder, of the best polynomial of degree 16, and of the model itself, and
+# the MSE gap. Two kinds of runs: retrained from the same initialization over a longer cosine schedule
 # (cached under checkpoints/big_long/ for 150k, checkpoints/big_<steps>/ otherwise), and one trajectory
 # continued from the 20k checkpoint of class_check.py at a lower peak lr, which keeps the geometry that run
 # discovered: each milestone continues the previous one's checkpoint and anneals its own cosine, so every
@@ -10,6 +10,7 @@
 #   python -m figures.long_run <steps ...>        retrained runs only
 #   python -m figures.long_run cont <steps ...>   the continued trajectory, chained through the listed milestones
 import sys
+from collections.abc import Sequence
 
 import torch
 
@@ -20,7 +21,18 @@ INIT = CKPT / "big" / "bilinear4" / f"seed{SEED}" / "model.pt"
 scratch = lambda s: (s, CKPT / ("big_long" if s == 150_000 else f"big_{s}"), None, 1e-3, s)
 
 
-def chain(milestones):
+def chain(milestones: Sequence[int]):
+    """The job list of the continued trajectory. `milestones` holds increasing step counts,
+    e.g. (130_000, 280_000, 580_000) in the default run:
+      - each milestone is a running total of extra steps beyond the 20k checkpoint (INIT);
+      - its job trains for the difference from the previous milestone, at the lower peak
+        lr 1e-4, starting from the previous milestone's cached model (INIT for the first);
+      - the result is cached under checkpoints/big_cont_<milestone>/;
+      - the returned jobs are the same 5-tuples as scratch()'s, which the main loop consumes:
+        (steps to train, checkpoint root, init checkpoint, lr, the total for the printed label);
+      - since train() skips cached runs, rerunning a chain only trains the milestones not
+        yet on disk.
+    """
     prev, path, jobs = 0, INIT, []
     for s in milestones:
         root = CKPT / f"big_cont_{s}"
@@ -50,9 +62,8 @@ for steps, root, init, lr, total in jobs:
         y_model = model(x)
     y_fit = poly_predictor(u, x, DEG)(u).float()
     mse = {k: (x - y).pow(2).mean().item() for k, y in (("binned", mean[flat]), ("fit", y_fit), ("model", y_model))}
-    score = 1 - (y_model - y_fit).pow(2).sum().item() / (y_model - y_model.mean(0)).pow(2).sum().item()
     m = measure(W)
     label = f"20,000 + {total:,} steps continued at lr {lr:g}" if init else f"{total:,} steps"
     print(f"geometry: {classify(m)}; " + "; ".join(f"pair {p['pair']} ratio {p['ratio']:.2f} cos {p['cos']:.3f}" for p in m["pairs"]))
     print(f"four bilinear MLPs, seed {SEED}, {label}: MSE binned {mse['binned']:.4f}  best of class {mse['fit']:.4f}  "
-          f"model {mse['model']:.4f}  gap {(mse['model'] - mse['fit']) / mse['model'] * 100:.1f}%  score {score:.4f}", flush=True)
+          f"model {mse['model']:.4f}  gap {(mse['model'] - mse['fit']) / mse['model'] * 100:.1f}%", flush=True)

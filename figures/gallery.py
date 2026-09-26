@@ -22,6 +22,9 @@ runs = all_runs()
 fig, axes = plt.subplots(1, 2, figsize=(9.0, 4.4), layout="constrained")
 for ax, (arch, title) in zip(axes, (("bilinear1", "1 bilinear layer"), ("bilinear4", "4 bilinear layers"))):
     recs = runs[arch]
+    # Counter is a dictionary that counts how many times each value appears in whatever you feed
+    # it: fed the 20 runs' strategy labels it gives e.g. {"neither": 19, "other geometry": 1},
+    # and .most_common(1) returns [("neither", 19)], which [0][0] unwraps to the label itself
     modal = Counter(classify(r["m"]) for r in recs).most_common(1)[0][0]
     rec = min((r for r in recs if classify(r["m"]) == modal), key=lambda r: r["eval_mse"])
     W, m = rec["W"], rec["m"]
