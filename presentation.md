@@ -33,25 +33,25 @@ author: Bartosz Rzepkowski, Philipp Alexander Kreer, Thomas Dooms, Logan Riggs
 
 ### Introduction
 
-- *Toy Models of Superposition* observes deformed, non-uniform geometries only when the features themselves are non-uniform — differing in importance or sparsity, or are correlated.
+- *Toy Models of Superposition* observes deformed, non-uniform geometries only when the features themselves are non-uniform — differing in importance, sparsity, or being correlated.
 
-- **For identical features however it finds regular geometric structures, such as antipodal pairs, triangles and pentagons. Its authors, however, remark that this structure "seems 'too elegant to be true'" and that "there's a good chance it's at least partly idiosyncratic to the toy model we're investigating".**
+- **For identical features, however, it finds regular geometric structures, such as antipodal pairs, triangles and pentagons. Its authors remark that this structure "seems 'too elegant to be true'" and that "there's a good chance it's at least partly idiosyncratic to the toy model we're investigating".**
 
 ---
 
 ### Introduction
 
-- This work confirms this suspicion. It turns out that non-symmetric solutions give better performance, but the shallow models are just not expressive enough to "discover them".
+- This work confirms this suspicion. It turns out that non-symmetric solutions give better performance, but the shallow models are just not expressive enough to "discover" them.
 
-- In this work we study deeper models, which thanks to their increased expressivity discover better "strategies" resulting in smaller MSE.
+- In this work we study deeper models, which, thanks to their increased expressivity, discover better "strategies" resulting in a smaller MSE.
 
-- We also introduce a theoretically best possible solution to this task (like a model with an infinite expressivity), and use it as a benchmark to compare against, when analyzing our models.
+- We also introduce the theoretically best possible solution to this task (like a model with infinite expressivity), and use it as a benchmark to compare against when analyzing our models.
 
 ---
 
 ### Setup
 
-- We will be working with models consisting of a linear encoder followed by multiple MLPs with bilinear activation:
+- We will be working with models consisting of a linear encoder followed by multiple MLPs with a bilinear activation:
 
 ![](figures/setup_diagram.png)
 
@@ -77,9 +77,9 @@ author: Bartosz Rzepkowski, Philipp Alexander Kreer, Thomas Dooms, Logan Riggs
 
 - Imagine that you and your friend are playing a game.
 
-- You are the encoder, and your goal is to arrange the feature embeddings in such a way, which will make your friend's (the decoder) life easier.
+- You are the encoder, and your goal is to arrange the feature embeddings in such a way that will make your friend's (the decoder's) life easier.
 
-- That is, you should come up with the best possible arrangement of 4 feature embeddings to maximize the chances that your friend will guess correctly what the true input was, before going through the bottleneck.
+- That is, you should come up with the best possible arrangement of 4 feature embeddings to maximize the chances that your friend will guess correctly what the true input was before going through the bottleneck.
 
 ---
 
@@ -93,9 +93,9 @@ author: Bartosz Rzepkowski, Philipp Alexander Kreer, Thomas Dooms, Logan Riggs
 
 ### Trivial strategy
 
-- Let's focus for now on the horizontal line segment spanned by the $f_1$ and $f_3$ feature embedding. Let's denote it as $s$.
+- Let's focus for now on the horizontal line segment spanned by the $f_1$ and $f_3$ feature embeddings. Let's denote it as $s$.
 
-- This arrangement has one flaw. When two features in the same pair are co-active, the decoder cannot perfectly distinguish this case from a scenario, in which only one of them was active:
+- This arrangement has one flaw. When two features in the same pair are co-active, the decoder cannot perfectly distinguish this case from a scenario in which only one of them was active:
 
 ![](figures/naive_cases.png)
 
@@ -107,7 +107,7 @@ author: Bartosz Rzepkowski, Philipp Alexander Kreer, Thomas Dooms, Logan Riggs
 
 - You might ask: "Why should the decoder use the average? Can't he use the median or the maximum instead?"
 
-- This comes from a fact that we are using MSE to measure the performance of the whole system.
+- This comes from the fact that we are using MSE to measure the performance of the whole system.
 
 ---
 
@@ -119,7 +119,7 @@ author: Bartosz Rzepkowski, Philipp Alexander Kreer, Thomas Dooms, Logan Riggs
 
 - The value you output will be compared with all the points that you were given.
 
-- The sum of distances to each of these points squared is your final "score", and you should make it as small as possible.
+- The sum of squared distances to each of these points is your final "score", and you should make it as small as possible.
 
 - What should you do?
 
@@ -139,7 +139,7 @@ author: Bartosz Rzepkowski, Philipp Alexander Kreer, Thomas Dooms, Logan Riggs
 
 - We've shown that the decoder should use the average to achieve his goal. But how should he use it given the reading on the horizontal line segment $s$?
 
-- Let's firstly take a look at what the decoder is seeing, when given a bunch of samples, and trying to predict the true value of the feature $x_1$:
+- Let's first take a look at what the decoder is seeing, when given a bunch of samples and trying to predict the true value of the feature $x_1$:
 
 ![](figures/samples_x1_sym.png)
 
@@ -170,13 +170,13 @@ author: Bartosz Rzepkowski, Philipp Alexander Kreer, Thomas Dooms, Logan Riggs
 
 ### Trivial strategy - decoder's action
 
-- In this figure we are also presenting a closed form solution to the best possible prediction the decoder can make.
+- In this figure we are also presenting a closed-form solution to the best possible prediction the decoder can make.
 
-- However, its derivation is quite difficult and requires knowing the true data generating process — something we usually lack, having access only to data samples.
+- However, its derivation is quite difficult and requires knowing the true data-generating process — something we usually lack, having access only to data samples.
 
 - Still, given an infinite amount of samples and infinitely narrow bins, the binned predictions would converge to the closed form.
 
-- Moving on we will switch between the closed form solution and the binned average, wherever more convenient.
+- Moving on, we will switch between the closed-form solution and the binned average, wherever more convenient.
 
 ![](figures/binned_x1_sym.png)
 
@@ -207,31 +207,31 @@ author: Bartosz Rzepkowski, Philipp Alexander Kreer, Thomas Dooms, Logan Riggs
 
 ![](figures/asym_compare.png)
 
-- We can see that **the asymmetrical approach gives smaller overal MSE!**
+- We can see that **the asymmetrical approach gives a smaller overall MSE!**
 
 ---
 
 ### Better strategies - opening the pair
 
-- Another way to improve the decoders chances are to "open" the feature embedding pair:
+- Another way to improve the decoder's chances is to "open" the feature embedding pair:
 
 ![](figures/opening.png)
 
 - With this setup:
-    - in a situation with just a single feature being active we still get a reading on one of the feature embeddings,
+    - in a situation with just a single feature being active, we still get a reading on one of the feature embeddings,
     - when two features are co-active we get a reading inside the parallelogram spanned by the feature embeddings, which is distinguishable from the case with just a single feature being active.
 
 ---
 
 ### Better strategies - opening the pair
 
-- This approach is not perfect however. We need to remember that we need to store four different embeddings in a 2D plane.
+- This approach is not perfect, however. We need to remember that we have to store four different embeddings in a 2D plane.
 
 - Thus, tilting the $f_3$ feature embedding makes it overlap with the $f_2$ one — we will call this effect the **interference** between features:
 
 ![](figures/opened_geometry_plain.png)
 
-- Still, this strategy is better than not tilting at all: to get a reading on the overlapping line segment $x_1$ and $x_3$ would have to be co-active **and** produce a reading landing exactly on the $f_2$ embedding, which is extremely rare.
+- Still, this strategy is better than not tilting at all: to get a reading on the overlapping line segment, $x_1$ and $x_3$ would have to be co-active **and** produce a reading landing exactly on the $f_2$ embedding, which is extremely rare.
 
 ---
 
@@ -240,13 +240,13 @@ author: Bartosz Rzepkowski, Philipp Alexander Kreer, Thomas Dooms, Logan Riggs
 To summarize, the **best possible strategy should balance three mechanisms**:
 - It can make the embeddings of a pair **asymmetrical**, which lowers the overall MSE,
 - It can **tilt** the pairs open, so that co-activation can be told apart from a single active feature,
-- But at the same time it needs to acommodate for the **interference** with the other pair's features.
+- But at the same time it needs to account for the **interference** with the other pair's features.
 
 ---
 
 ### Best possible strategy
 
-- We can find the theoretically best possible arrangement of embeddings by changing their length and tilt, and scoring the final result using the binned decoder (with bins being in this case small 2D squares instead of extremely short lien segments).
+- We can find the theoretically best possible arrangement of embeddings by changing their length and tilt, and scoring the final result using the binned decoder (with bins being in this case small 2D squares instead of extremely short line segments).
 
 - This kind of search results in the following arrangement:
 
@@ -258,7 +258,7 @@ To summarize, the **best possible strategy should balance three mechanisms**:
 
 - We can notice that the paired features are clearly asymmetrical and tilted.
 
-- But the $f_1$ and $f_2$ embeddings turned out extremely short. It turns out that they are shortened in order to reduce the aforementioned interference.
+- But the $f_1$ and $f_2$ embeddings came out extremely short. It turns out that they are shortened in order to reduce the aforementioned interference.
 
 ---
 
@@ -272,19 +272,19 @@ To summarize, the **best possible strategy should balance three mechanisms**:
 
 ---
 
-### Why only deep models utilize asymmetry?
+### Why do only deep models utilize asymmetry?
 
-- The depth of a model corresponds to its expressivity. A model with a single bilinear MLP can be understood as a 2nd degree polynomial, while the model with four MLPs is a 16-degree polynomial.
+- The depth of a model corresponds to its expressivity. A model with a single bilinear MLP can be understood as a 2nd-degree polynomial, while the model with four MLPs is a 16th-degree polynomial.
 
-- With this and having the best theoretical decoder, we can look for the best in class approximation of the unconstrained solution.
+- With this in mind and having the best theoretical decoder as a benchmark, we can look for the best-in-class approximation of the unconstrained solution.
 
 ---
 
-### Why only deep models utilize asymmetry?
+### Why do only deep models utilize asymmetry?
 
-- Below we show the theoretical decoder in gray, and the colored curves are its approximation.
+- Below we show the theoretical decoder in gray, together with its approximations as the colored curves.
 
-- For a 2nd degree polynomial (shallow model) we can clearly see that it can better approximate the symmetrical case than the asymmetrical one:
+- For a 2nd-degree polynomial (shallow model) we can clearly see that it approximates the symmetrical case better than the asymmetrical one:
 
 ![](figures/class_quadratic.png)
 
@@ -292,29 +292,29 @@ To summarize, the **best possible strategy should balance three mechanisms**:
 
 ---
 
-### Why only deep models utilize asymmetry?
+### Why do only deep models utilize asymmetry?
 
-- The 16-degree polynomial (deep model) has no problem with approximating both the symmetrical and asymmetrical cases, so it choose the one which gives smaller overal MSE:
+- The 16th-degree polynomial (deep model) has no problem approximating both the symmetrical and asymmetrical cases, so it chooses the one which gives a smaller overall MSE:
 
 ![](figures/class_deg16.png)
 
 ---
 
-### Why only deep models utilize asymmetry?
+### Why do only deep models utilize asymmetry?
 
-- We also studied the model investigated in the *Toy models of superposition* paper.
+- We also studied the model investigated in the *Toy Models of Superposition* paper.
 
-- Similarly as shallow bilinear model it cannot approximate properly the asymmetrical solution, so it will default to the symmetrical one:
+- Similarly to the shallow bilinear model, it cannot properly approximate the asymmetrical solution, so it will default to the symmetrical one:
 
 ![](figures/class_relu_tied.png)
 
 ---
 
-### Why only deep models utilize tilt?
+### Why do only deep models utilize tilt?
 
-- To understand why only deeper models are utilizing tilting of the pair we can run a similar experiment.
+- To understand why only deeper models utilize the tilting of the pair, we can run a similar experiment.
 
-- This time we will fix the geometry in the previously shown case with just one embedding being slightly tilted. We will focus on the line segment cutting the plane as shown below:
+- This time we will fix the geometry to the previously shown case, with just one embedding being slightly tilted. We will focus on the line segment cutting the plane as shown below:
 
 ![](figures/opened_geometry.png)
 
@@ -322,24 +322,22 @@ To summarize, the **best possible strategy should balance three mechanisms**:
 
 ---
 
-### Why only deep models utilize tilt?
+### Why do only deep models utilize tilt?
 
-- It turns out that, again, the expressivity of the model explains why it can or cannot use the tilitng.
+- It turns out that, again, the expressivity of the model explains why it can or cannot use the tilting.
 
 - Below we can see the results of the fitting procedure:
 
 ![](figures/opened_decoded.png)
 
-- The binned decoder can very efficiently detect this opening of a pair. The shallow models are too simple to detect such a narrow opening. Only models with 3 and 4 bilinerar MLPs are expressive enough to be able to detect the opening.
+- The binned decoder can very efficiently detect this opening of a pair. The shallow models are too simple to detect such a narrow opening. Only models with 3 and 4 bilinear MLPs are expressive enough to detect the opening.
 
 ---
 
 ### Summary
 
-- We've shown that the symmetrical geometries formed by the feature embeddings, discovered in *Toy Models of Superposition* in experiments with features of equal importance, sparsity and with no correlation, are an artifact of the chosen model architecture rather than a general phenomenon.
+- We've shown that the symmetrical geometries formed by the feature embeddings, discovered in *Toy Models of Superposition* in experiments with features of equal importance and sparsity, and with no correlation, are an artifact of the chosen model architecture rather than a general phenomenon.
 
 - We've presented several asymmetrical strategies, which the models can use to reduce the overall MSE.
 
 - Only deep models can utilize these strategies, thanks to their greater expressivity compared to their shallow counterparts.
-
-
