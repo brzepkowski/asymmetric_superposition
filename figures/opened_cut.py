@@ -1,6 +1,7 @@
 # One pair slightly opened (f3 tilted by EPS degrees off the antipode of f1), the other closed.
 #   opened_geometry -- the embeddings, the co-active parallelograms, and a vertical cut
-#                      through the thin (f1, f3) strip
+#                      through the thin (f1, f3) strip; opened_geometry_plain is the same
+#                      frame without the cut and strip marks
 #   opened_decoded  -- the reading of feature 3 along that cut: the binned decoder
 #                      and the best fit from each polynomial class and the tied ReLU
 #   opened_3d       -- each of those functions as a 3D surface over the hidden plane,
@@ -46,15 +47,17 @@ for i, (x, y) in F.items():
     ax.annotate("", xy=(x, y), xytext=(0, 0), zorder=3,
                 arrowprops=dict(arrowstyle="-|>", color=PBLUE, lw=2.4, shrinkA=0, shrinkB=0))
     ax.text(1.12 * x, 1.12 * y, f"$f_{i}$", color=PBLUE, fontsize=15, ha="center", va="center")
+ax.set_xlim(-1.3, 1.3)
+ax.set_ylim(-1.2, 1.55)
+ax.set_aspect("equal")
+ax.spines[["top", "right"]].set_visible(False)
+fig.savefig(OUT / "opened_geometry_plain.pdf")
+fig.savefig(OUT / "opened_geometry_plain.png", dpi=200)
 ax.plot([CUT_X, CUT_X], [-0.3, 1.1], ls="--", color="black", lw=1.4, zorder=4)
 ax.plot([CUT_X, CUT_X], [0, strip], color=ORANGE, lw=7, solid_capstyle="butt", zorder=5)
 ax.text(CUT_X + 0.05, 1.08, "the cut", ha="left", va="top")
 ax.annotate("the strip", xy=(CUT_X, strip / 2), xytext=(0.95, 0.5), color=ORANGE,
             arrowprops=dict(arrowstyle="->", color=ORANGE, lw=1.2))
-ax.set_xlim(-1.3, 1.3)
-ax.set_ylim(-1.2, 1.55)
-ax.set_aspect("equal")
-ax.spines[["top", "right"]].set_visible(False)
 fig.savefig(OUT / "opened_geometry.pdf")
 fig.savefig(OUT / "opened_geometry.png", dpi=200)
 

@@ -1,5 +1,6 @@
 # Representative trained encoder geometries, 1 vs 4 bilinear MLPs: the modal strategy of each
-# architecture, its best-eval seed. Also prints the strategy table of the write-up (20 runs per row).
+# architecture, its best-eval seed; also a standalone copy of the 1-layer panel (gallery_bilinear1).
+# Also prints the strategy table of the write-up (20 runs per row).
 # Run from the repo root: python -m figures.gallery
 from collections import Counter
 from pathlib import Path
@@ -19,8 +20,9 @@ TABLE = (("symmetric pairs", ("neither",)), ("asymmetric pairs", ("asymmetry onl
 
 plt.rcParams.update({"font.size": 12, "axes.titlesize": 14})
 runs = all_runs()
-fig, axes = plt.subplots(1, 2, figsize=(9.0, 4.4), layout="constrained")
-for ax, (arch, title) in zip(axes, (("bilinear1", "1 bilinear layer"), ("bilinear4", "4 bilinear layers"))):
+
+
+def draw(ax, arch, title):
     recs = runs[arch]
     # Counter is a dictionary that counts how many times each value appears in whatever you feed
     # it: fed the 20 runs' strategy labels it gives e.g. {"neither": 19, "other geometry": 1},
@@ -43,9 +45,21 @@ for ax, (arch, title) in zip(axes, (("bilinear1", "1 bilinear layer"), ("bilinea
     ax.set_aspect("equal")
     ax.set_title(title)
     ax.spines[["top", "right"]].set_visible(False)
+    return modal, rec
+
+
+fig, axes = plt.subplots(1, 2, figsize=(9.0, 4.4), layout="constrained")
+for ax, (arch, title) in zip(axes, (("bilinear1", "1 bilinear layer"), ("bilinear4", "4 bilinear layers"))):
+    modal, rec = draw(ax, arch, title)
     print(f"{arch}: seed {rec['seed']}, class {modal}, eval MSE {rec['eval_mse']:.4f}")
 fig.savefig(OUT.with_suffix(".pdf"))
 fig.savefig(OUT.with_suffix(".png"), dpi=200)
+
+fig, ax = plt.subplots(figsize=(4.6, 4.4), layout="constrained")
+draw(ax, "bilinear1", "")
+ax.axis("off")
+fig.savefig(OUT.with_name("gallery_bilinear1.pdf"))
+fig.savefig(OUT.with_name("gallery_bilinear1.png"), dpi=200)
 
 print("\n| model | " + " | ".join(name for name, _ in TABLE) + " |")
 for arch in ("relu_tied", "bilinear1", "bilinear2", "bilinear3", "bilinear4"):

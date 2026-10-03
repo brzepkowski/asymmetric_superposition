@@ -2,6 +2,7 @@
 #   posterior_x1_sym   -- best decoder for x1 alone, black line
 #   posterior_pair_sym -- best decoders for x1 (blue) and x3 (orange)
 #   samples_x1_sym     -- (s, x1) pairs drawn from the sampling process itself
+#   samples_x1_bin     -- the same samples with one bin marked
 #   binned_x1_sym      -- binned means of those samples over the closed-form curve
 # The decoder plots mark the discontinuity at s = 0 (open circle at the one-sided
 # limits p/2, closed at 0). Run from the repo root: python -m figures.posterior_sym
@@ -93,6 +94,23 @@ if __name__ == "__main__":
               loc="upper left", frameon=False, handletextpad=0.3)
     fig.savefig(OUT / "samples_x1_sym.pdf")
     fig.savefig(OUT / "samples_x1_sym.png", dpi=200)
+
+    # the same scatter with one bin [S0, S1) marked — the binned-decoder illustration
+    # of the presentation
+    S0, S1 = 0.42, 0.48
+    fig, ax = new_fig()
+    for c, color, _ in CASES:
+        m = case == c
+        ax.scatter(x[m, 0] - x[m, 1], x[m, 0], s=9, color=color, alpha=0.35, lw=0, zorder=4 - c)
+    ax.axvspan(S0, S1, color=MUTED, alpha=0.18, zorder=0)
+    for e in (S0, S1):
+        ax.axvline(e, color="black", lw=1.1, ls="--", zorder=5)
+    frame(ax, marks=False, guide=False)
+    ax.set_ylabel("$x_1$")
+    ax.legend(handles=[plt.Line2D([], [], ls="", marker="o", ms=7, color=color, label=label) for _, color, label in CASES],
+              loc="upper left", frameon=False, handletextpad=0.3)
+    fig.savefig(OUT / "samples_x1_bin.pdf")
+    fig.savefig(OUT / "samples_x1_bin.png", dpi=200)
 
     # binned conditional means of the same samples, over the closed-form curve;
     # the exact-zero readings (the "neither active" atom) are a bin of their own
