@@ -160,19 +160,26 @@
 
 \begin{frame}{Trivial strategy - decoder's action}
 \begin{itemize}
-  \item For very fine bins the decoder gives the following predictions:
+  \item With very fine bins, the decoder's predictions (the blue line) look as follows:
 \end{itemize}
-\slidefig[0.6]{binned_x1_sym.pdf}
+\slidefig[0.74]{binned_x1_sym.pdf}
 \end{frame}
 
 \begin{frame}{Trivial strategy - decoder's action}
+\begin{columns}[c]
+\begin{column}{0.52\textwidth}
 \begin{itemize}
-  \item In this figure we are also presenting a closed-form solution to the best possible prediction the decoder can make.
-  \item However, its derivation is quite difficult and requires knowing the true data-generating process --- something we usually lack, having access only to data samples.
-  \item Still, given an infinite amount of samples and infinitely narrow bins, the binned predictions would converge to the closed form.
-  \item Moving on, we will switch between the closed-form solution and the binned average, wherever more convenient.
+  \item The black curve is the closed-form solution: the best possible prediction the decoder can make.
+  \item Deriving it is quite difficult and requires knowing the true data-generating process --- something we usually lack, having access only to data samples.
+  \item Still, with infinitely many samples and infinitely narrow bins, the binned predictions would converge to the closed form.
+  \item From now on, we will switch between the closed-form solution and the binned average, whichever is more convenient.
 \end{itemize}
-\slidefig[0.32]{binned_x1_sym.pdf}
+\end{column}
+\begin{column}{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figures/binned_x1_sym.pdf}
+\end{column}
+\end{columns}
 \end{frame}
 
 \begin{frame}{Trivial strategy - decoder's action}
@@ -250,7 +257,7 @@ To summarize, the \textbf{best possible strategy should balance three mechanisms
   \item We can find the theoretically best possible arrangement of embeddings by changing their length and tilt, and scoring the final result using the binned decoder (with bins being in this case small 2D squares instead of extremely short line segments).
   \item This kind of search results in the following arrangement:
 \end{itemize}
-\slidefig[0.56]{optimal_geometry.pdf}
+\slidefig[0.57]{optimal_geometry.pdf}
 \end{frame}
 
 \begin{frame}{Best possible strategy}
